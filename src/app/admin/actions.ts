@@ -250,6 +250,14 @@ export async function addCallNote(visitId: string, body: string) {
   return rows;
 }
 
+/** The current photos and snapshots for a visit, for refreshing the call room without reloading it. */
+export async function listShots(visitId: string) {
+  await requireAdmin();
+  const id = uuid.parse(visitId);
+  const rows = await db().select().from(schema.visitMedia).where(eq(schema.visitMedia.visitId, id)).orderBy(schema.visitMedia.createdAt);
+  return rows.filter((m) => m.contentType.startsWith("image/")).map((m) => ({ id: m.id, url: m.url, name: m.name || "Photo", meta: m.meta ?? null }));
+}
+
 const linePoints = { ax: z.number().finite(), ay: z.number().finite(), bx: z.number().finite(), by: z.number().finite() };
 const measureSchema = z.object({
   w: z.number().int().positive().max(20000),

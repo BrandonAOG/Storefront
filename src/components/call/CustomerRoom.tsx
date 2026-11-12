@@ -31,6 +31,36 @@ export function CustomerRoom({ token, business, firstName, iceServers }: { token
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState("");
 
+  // When the specialist presses Snapshot, send a still straight from this phone's
+  // camera at its full quality (the live video is compressed and less sharp).
+  const { snapAsked, photoDone } = call;
+  useEffect(() => {
+    if (!snapAsked) return;
+    let cancelled = false;
+    void (async () => {
+      const v = ownVideo.current;
+      let ok = false;
+      try {
+        if (v && v.videoWidth) {
+          const canvas = document.createElement("canvas");
+          canvas.width = v.videoWidth;
+          canvas.height = v.videoHeight;
+          canvas.getContext("2d")!.drawImage(v, 0, 0);
+          const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.9));
+          if (blob && blob.size <= 4 * 1024 * 1024) {
+            ok = (await fetch(`/api/call/${token}/photo`, { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: blob })).ok;
+          }
+        }
+      } catch {
+        ok = false;
+      }
+      if (!cancelled) photoDone(ok);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [snapAsked, photoDone, token]);
+
   /** Only runs when the customer taps Share. Their phone then asks them again before giving the location. */
   const shareLocation = () => {
     if (!navigator.geolocation) return call.answerLocation(null);

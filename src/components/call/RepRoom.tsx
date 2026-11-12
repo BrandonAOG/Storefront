@@ -17,6 +17,7 @@ type Props = {
   customerLink: string;
   addNote: (visitId: string, body: string) => Promise<Note[]>;
   saveMeasure: (id: string, meta: MeasureMeta) => Promise<{ ok: boolean }>;
+  listShots: (visitId: string) => Promise<Shot[]>;
 };
 
 const clock = (s: number) => `${String(Math.floor(s / 3600)).padStart(2, "0")}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
@@ -73,7 +74,7 @@ function TimedPointer({ pointer, video, fit }: { pointer: { x: number; y: number
 }
 
 /** Your side of a virtual visit: the customer's camera, their details, snapshots and notes. */
-export function RepRoom({ visit, iceServers, shots: initialShots, notes: initialNotes, customerLink, addNote, saveMeasure }: Props) {
+export function RepRoom({ visit, iceServers, shots: initialShots, notes: initialNotes, customerLink, addNote, saveMeasure, listShots }: Props) {
   const call = useCall({ role: "rep", signalUrl: `/admin/call/${visit.id}/signal`, iceServers });
   const [shots, setShots] = useState(initialShots);
   const [notes, setNotes] = useState(initialNotes);
@@ -103,23 +104,32 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
   const fit = fill ? "cover" : "contain";
   const location = call.location && typeof call.location === "object" ? call.location : visit.location;
 
-  /** Grab the current frame of the customer's video at its full resolution. */
+  /**
+   * Save a still. First ask the customer's phone to send one straight from its
+   * camera at full quality; that is far sharper than the live video, which is
+   * compressed for the network. If the phone can't, fall back to grabbing the
+   * frame currently on screen.
+   */
   const snapshot = async () => {
     const v = remoteVideo.current;
     if (!v || !v.videoWidth) return setFlash("No picture from the customer yet.");
+    setFlash("Taking snapshot…");
+    if (await call.requestPhoto()) {
+      setShots(await listShots(visit.id));
+      return setFlash("Snapshot saved at full camera quality.");
+    }
     const canvas = document.createElement("canvas");
     canvas.width = v.videoWidth;
     canvas.height = v.videoHeight;
     canvas.getContext("2d")!.drawImage(v, 0, 0);
     const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.9));
     if (!blob) return setFlash("Couldn't capture the picture.");
-    setFlash("Saving snapshot…");
     try {
       const res = await fetch(`/admin/call/${visit.id}/snapshot`, { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: blob });
       const data = await res.json();
       if (!res.ok) return setFlash(data.error ?? "Couldn't save the snapshot.");
       setShots((s) => [...s, data]);
-      setFlash("Snapshot saved.");
+      setFlash("Snapshot saved from the live video (lower quality).");
     } catch {
       setFlash("Couldn't save the snapshot.");
     }
@@ -198,11 +208,22 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
               </div>
 
               {hasPicture && (
-                <div className="absolute top-3 right-3 z-10 flex gap-1 rounded-full bg-black/70 p-1 text-xs font-bold">
-                  <button type="button" className="rounded-full px-3 py-1.5 hover:bg-white/15" onClick={() => setFill(!fill)} title="Fit shows the whole picture; Fill uses the full width and trims the edges">{fill ? "Fit" : "Fill"}</button>
-                  <button type="button" className="rounded-full px-3 py-1.5 hover:bg-white/15 disabled:opacity-40" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => setZoom(Math.max(1, zoom - 0.5))}>−</button>
-                  <span className="grid min-w-9 place-items-center" aria-live="polite">{zoom}×</span>
-                  <button type="button" className="rounded-full px-3 py-1.5 hover:bg-white/15 disabled:opacity-40" aria-label="Zoom in" disabled={zoom >= 4} onClick={() => setZoom(Math.min(4, zoom + 0.5))}>+</button>
+                <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2 text-xs font-bold">
+                  <div className="flex gap-1 rounded-full bg-black/70 p-1">
+                    <button type="button" className="rounded-full px-3 py-1.5 hover:bg-white/15" onClick={() => setFill(!fill)} title="Fit shows the whole picture; Fill uses the full width and trims the edges">{fill ? "Fit" : "Fill"}</button>
+                    <button type="button" className="rounded-full px-3 py-1.5 hover:bg-white/15 disabled:opacity-40" aria-label="Enlarge less" disabled={zoom <= 1} onClick={() => setZoom(Math.max(1, zoom - 0.5))}>−</button>
+                    <span className="grid min-w-9 place-items-center" aria-live="polite" title="Enlarges the picture on your screen. It doesn't add detail.">{zoom}×</span>
+                    <button type="button" className="rounded-full px-3 py-1.5 hover:bg-white/15 disabled:opacity-40" aria-label="Enlarge more" disabled={zoom >= 4} onClick={() => setZoom(Math.min(4, zoom + 0.5))}>+</button>
+                  </div>
+                  {call.remoteZoom ? (
+                    <label className="flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5">
+                      <span>Customer&apos;s camera zoom</span>
+                      <input type="range" aria-label="Customer's camera zoom" min={call.remoteZoom.min} max={call.remoteZoom.max} step={call.remoteZoom.step} value={call.remoteZoom.value} onChange={(e) => call.zoomRemote(Number(e.target.value))} className="w-32 accent-[#fed425]" />
+                      <span className="min-w-8 text-right">{call.remoteZoom.value.toFixed(1)}×</span>
+                    </label>
+                  ) : (
+                    connected && <p className="max-w-64 rounded-xl bg-black/70 px-3 py-1.5 text-right font-normal text-slate-300">For fine print, ask the customer to move closer, then press Snapshot. Snapshots are sharper than the live picture.</p>
+                  )}
                 </div>
               )}
 
@@ -269,6 +290,7 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
           <Section title="Tips">
             <ul className="list-disc space-y-1 pl-4 text-slate-300">
               <li>Click the customer&apos;s picture to mark a spot on their screen.</li>
+              <li>To read small print such as a panel schedule, have them hold the phone close and steady, then take a snapshot. Snapshots come from their camera at full quality.</li>
               <li>Ask them to turn the phone sideways for a wider picture.</li>
               <li>For measuring, have them tape a sheet of paper flat on the surface before you take the snapshot.</li>
             </ul>

@@ -14,6 +14,10 @@ type Control =
   | { t: "point"; x: number; y: number }
   | { t: "share"; on: boolean }
   | { t: "video"; on: boolean }
+  | { t: "caps"; zoomMin?: number; zoomMax?: number; zoomStep?: number }
+  | { t: "zoom"; value: number }
+  | { t: "snap" }
+  | { t: "photo"; ok: boolean }
   | { t: "locate" }
   | { t: "location"; lat?: number; lng?: number; accuracy?: number; declined?: boolean };
 
@@ -47,6 +51,10 @@ export type CallState = {
   locationAsked: boolean;
   /** Rep: what came back. */
   location: Shared | "asked" | "declined" | null;
+  /** Rep: the customer's real camera zoom range, when their phone lets a web page control it. */
+  remoteZoom: { min: number; max: number; step: number; value: number } | null;
+  /** Customer: counts requests from the rep for a full-quality still. */
+  snapAsked: number;
   /** Customer: phone flashlight available / on. */
   torch: "unsupported" | "off" | "on";
 };
@@ -54,7 +62,7 @@ export type CallState = {
 const initial = (role: Role): CallState => ({
   status: "idle", error: "", local: null, remote: null, muted: false, cameraOff: false, facing: role === "customer" ? "environment" : "user",
   hasCamera: false, hasMic: false, cameraProblem: "", sharing: false, repVideo: false, mics: [], cameras: [], speakers: [], micId: "", cameraId: "", speakerId: "",
-  pointer: null, locationAsked: false, location: null, torch: "unsupported",
+  pointer: null, locationAsked: false, location: null, remoteZoom: null, snapAsked: 0, torch: "unsupported",
 });
 
 /**
@@ -72,6 +80,8 @@ class CallEngine {
   private dc: RTCDataChannel | null = null;
   private stream: MediaStream | null = null;
   private screen: MediaStreamTrack | null = null;
+  /** Rep: resolves when the customer's phone has sent (or failed to send) a full-quality still. */
+  private photoWaiter: ((ok: boolean) => void) | null = null;
   /** Rep: the last location the customer actually shared in this call. */
   private shared: Shared | null = null;
   private sid = "";
@@ -113,6 +123,15 @@ class CallEngine {
     else if (m.t === "share" && this.opts.role === "customer") this.set({ sharing: Boolean(m.on) });
     else if (m.t === "video" && this.opts.role === "customer") this.set({ repVideo: Boolean(m.on) });
     else if (m.t === "locate" && this.opts.role === "customer") this.set({ locationAsked: true });
+    else if (m.t === "caps" && this.opts.role === "rep") {
+      const ok = num(m.zoomMin) && num(m.zoomMax) && m.zoomMax! > m.zoomMin!;
+      this.set({ remoteZoom: ok ? { min: m.zoomMin!, max: m.zoomMax!, step: num(m.zoomStep) && m.zoomStep! > 0 ? m.zoomStep! : 0.1, value: m.zoomMin! } : null });
+    } else if (m.t === "zoom" && this.opts.role === "customer" && num(m.value)) void this.applyZoom(m.value);
+    else if (m.t === "snap" && this.opts.role === "customer") this.set({ snapAsked: this.state.snapAsked + 1 });
+    else if (m.t === "photo" && this.opts.role === "rep") {
+      this.photoWaiter?.(Boolean(m.ok));
+      this.photoWaiter = null;
+    }
     else if (m.t === "location" && this.opts.role === "rep") {
       // A "no thanks" never wipes out a location the customer already shared.
       if (m.declined || !num(m.lat) || !num(m.lng)) this.set({ location: this.shared ?? "declined" });
@@ -129,7 +148,42 @@ class CallEngine {
     // Tell a customer who (re)connects whether a screen share is already running.
     ch.onopen = () => {
       if (this.opts.role === "rep") this.tellVideo();
+      else this.tellCaps();
     };
+  }
+
+  /** Customer: tell the rep what this phone's camera can do (real zoom range, if any). */
+  private tellCaps() {
+    const caps = (this.stream?.getVideoTracks()[0]?.getCapabilities?.() ?? {}) as { zoom?: { min: number; max: number; step?: number } };
+    this.control(caps.zoom ? { t: "caps", zoomMin: caps.zoom.min, zoomMax: caps.zoom.max, zoomStep: caps.zoom.step } : { t: "caps" });
+  }
+
+  /** Customer: change this phone's real camera zoom, at the rep's request. */
+  private async applyZoom(value: number) {
+    const track = this.stream?.getVideoTracks()[0];
+    const caps = (track?.getCapabilities?.() ?? {}) as { zoom?: { min: number; max: number } };
+    if (!track || !caps.zoom) return;
+    const zoom = Math.min(caps.zoom.max, Math.max(caps.zoom.min, value));
+    await track.applyConstraints({ advanced: [{ zoom } as MediaTrackConstraintSet] }).catch(() => undefined);
+  }
+
+  /**
+   * Customer: favor a sharp picture over a smooth one. A site walk-through is
+   * mostly still shots of labels and equipment, so when the connection is
+   * tight it is better to drop frames than to blur the image.
+   */
+  private async preferSharpness() {
+    const sender = this.pc?.getSenders().find((s) => s.track?.kind === "video");
+    if (!sender?.track) return;
+    try {
+      sender.track.contentHint = "detail";
+      const p = sender.getParameters();
+      p.degradationPreference = "maintain-resolution";
+      if (p.encodings?.[0]) p.encodings[0].maxBitrate = 2_500_000;
+      await sender.setParameters(p);
+    } catch {
+      /* not supported in this browser: the call still works */
+    }
   }
 
   /** Rep: tell the customer whether a picture is being sent, and whether it is the screen. */
@@ -144,7 +198,7 @@ class CallEngine {
     this.pc = null;
     this.dc = null;
     this.pendingIce = [];
-    this.set({ remote: null, pointer: null });
+    this.set({ remote: null, pointer: null, remoteZoom: null });
   }
 
   /** The outgoing sender for sound or picture, whether or not it has a track yet. */
@@ -227,6 +281,7 @@ class CallEngine {
       await p.setLocalDescription(answer);
       await this.send("answer", { sid: this.sid, sdp: answer });
       await this.flushIce();
+      void this.preferSharpness();
     } else if (body.sid !== this.sid) {
       return; // from an earlier attempt
     } else if (m.kind === "answer") {
@@ -375,6 +430,8 @@ class CallEngine {
       await this.swapTrack("video", track, true);
       const caps = (track.getCapabilities?.() ?? {}) as { torch?: boolean };
       this.set({ facing: next, cameraOff: false, hasCamera: true, torch: caps.torch ? "off" : "unsupported" });
+      void this.preferSharpness();
+      this.tellCaps();
     } catch {
       /* this device has only one camera */
     }
@@ -440,6 +497,33 @@ class CallEngine {
     this.control({ t: "point", x, y });
   };
 
+  /** Rep: set the customer's real camera zoom. */
+  zoomRemote = (value: number) => {
+    if (!this.state.remoteZoom) return;
+    this.set({ remoteZoom: { ...this.state.remoteZoom, value } });
+    this.control({ t: "zoom", value });
+  };
+
+  /**
+   * Rep: ask the customer's phone for a full-quality still. Resolves true once
+   * the phone has uploaded it, or false if it can't or doesn't answer in time.
+   */
+  requestPhoto = () =>
+    new Promise<boolean>((resolve) => {
+      if (this.dc?.readyState !== "open") return resolve(false);
+      this.photoWaiter = resolve;
+      this.control({ t: "snap" });
+      setTimeout(() => {
+        if (this.photoWaiter === resolve) {
+          this.photoWaiter = null;
+          resolve(false);
+        }
+      }, 8000);
+    });
+
+  /** Customer: report whether the still was sent. */
+  photoDone = (ok: boolean) => this.control({ t: "photo", ok });
+
   /** Rep: ask the customer to share where they are. They choose whether to. */
   requestLocation = () => {
     this.set({ location: "asked" });
@@ -489,6 +573,6 @@ export function useCall(opts: Options) {
     ...state,
     start: engine.start, hangUp: engine.hangUp, toggleMute: engine.toggleMute, toggleCamera: engine.toggleCamera, flipCamera: engine.flipCamera,
     pickMic: engine.pickMic, pickCamera: engine.pickCamera, pickSpeaker: engine.pickSpeaker, startShare: engine.startShare, stopShare: engine.stopShare,
-    point: engine.point, requestLocation: engine.requestLocation, answerLocation: engine.answerLocation, toggleTorch: engine.toggleTorch,
+    point: engine.point, zoomRemote: engine.zoomRemote, requestPhoto: engine.requestPhoto, photoDone: engine.photoDone, requestLocation: engine.requestLocation, answerLocation: engine.answerLocation, toggleTorch: engine.toggleTorch,
   };
 }

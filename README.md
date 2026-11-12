@@ -184,9 +184,16 @@ booking.
 - **Customer extras:** flip camera, and a flashlight button on phones whose
   browser allows it (mostly Android; iPhone Safari does not).
 - A note with the call length is added to the visit when you end a call.
+- **Sharp detail:** the customer's phone is told to favor a sharp picture over a
+  smooth one, since a site walk-through is mostly still shots of labels and
+  equipment. Where the phone's browser allows it (mostly Android), a
+  **Customer's camera zoom** slider appears and drives the phone's real zoom.
+  The +/− buttons only enlarge the picture on your screen and add no detail.
 - **Snapshots:** press **Snapshot** during a call to save a still of the
-  customer's camera to the visit. Quality matches the live video, so ask the
-  customer to hold steady.
+  customer's camera to the visit. The still is taken on the customer's phone at
+  its camera's full quality and sent directly, so it is sharper than the live
+  picture; use it for fine print such as a panel schedule. If the phone can't
+  send one, the frame on your screen is saved instead and the room says so.
 - **Measuring:** open any snapshot or customer photo. For the best result use a
   **rectangle reference**: tap the four corners of a flat rectangle of known size
   (a sheet of letter paper on the wall, a door, the panel cover) and enter its

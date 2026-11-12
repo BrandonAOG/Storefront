@@ -6,7 +6,7 @@ import type { MeasureMeta } from "@/components/MeasureTool";
 import { requireAdmin } from "@/lib/auth";
 import { iceServers } from "@/lib/call";
 import { appUrl } from "@/lib/stripe";
-import { addCallNote, saveMeasurements } from "../../actions";
+import { addCallNote, listShots, saveMeasurements } from "../../actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Virtual visit call", robots: { index: false } };
@@ -30,6 +30,7 @@ export default async function CallRoom({ params }: { params: Promise<{ id: strin
       customerLink={`${appUrl()}/call/${v.token}`}
       addNote={addCallNote}
       saveMeasure={saveMeasurements}
+      listShots={listShots as (visitId: string) => Promise<{ id: string; url: string; name: string; meta: MeasureMeta | null }[]>}
     />
   );
 }
