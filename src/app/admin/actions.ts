@@ -246,6 +246,9 @@ const measureSchema = z.object({
   w: z.number().int().positive().max(20000),
   h: z.number().int().positive().max(20000),
   scale: z.object({ ...linePoints, inches: z.number().positive().max(100000) }).nullable(),
+  rect: z
+    .object({ pts: z.array(z.object({ x: z.number().finite(), y: z.number().finite() })).length(4), widthIn: z.number().positive().max(100000), heightIn: z.number().positive().max(100000) })
+    .nullish(),
   lines: z.array(z.object(linePoints)).max(40),
 });
 

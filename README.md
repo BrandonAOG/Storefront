@@ -160,10 +160,13 @@ booking.
 - **Snapshots:** press **Snapshot** during a call to save a still of the
   customer's camera to the visit. Quality matches the live video, so ask the
   customer to hold steady.
-- **Measuring:** open any snapshot or customer photo, drag a line over something
-  of known size and enter that size, then drag lines to measure. Results are
-  estimates: they are only accurate for things at the same distance and angle as
-  the reference. Confirm on site.
+- **Measuring:** open any snapshot or customer photo. For the best result use a
+  **rectangle reference**: tap the four corners of a flat rectangle of known size
+  (a sheet of letter paper on the wall, a door, the panel cover) and enter its
+  size. The tool corrects for the camera angle, so anything on that same flat
+  surface measures correctly even in a tilted photo. A quicker **line reference**
+  is also available but is only accurate at the same distance and angle. Neither
+  can measure depth between different surfaces. Confirm on site.
 - While a call is open each side checks for messages every 1 to 3 seconds, which
   counts toward your hosting plan's function usage.
 
