@@ -3,7 +3,7 @@ import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { Status } from "@/components/admin";
 import { requireAdmin } from "@/lib/auth";
-import { fmtDay, fmtWindow, money } from "@/lib/format";
+import { fmtAppointment, fmtDay, fmtWindow, money } from "@/lib/format";
 import { todayLocal } from "@/lib/slots";
 import { stripeEnabled } from "@/lib/stripe";
 
@@ -19,6 +19,12 @@ export default async function AdminHome() {
     db().select({ n: sql<number>`count(*)::int` }).from(schema.memberships).where(eq(schema.memberships.status, "active")),
     db().select({ n: sql<number>`count(*)::int` }).from(schema.memberships).where(inArray(schema.memberships.status, ["pending"])),
   ]);
+  const calls = await db()
+    .select()
+    .from(schema.visits)
+    .where(and(eq(schema.visits.status, "scheduled"), sql`${schema.visits.scheduledAt} > now() - interval '2 hours'`))
+    .orderBy(asc(schema.visits.scheduledAt))
+    .limit(10);
   const stats: [string, string, string][] = [
     ["Collected online, last 30 days", money(paid.total), `${paid.n} paid booking${paid.n === 1 ? "" : "s"}`],
     ["New virtual visit requests", String(newVisits.n), "waiting for a reply"],
@@ -36,6 +42,23 @@ export default async function AdminHome() {
             <p className="text-sm text-slate-500">{sub}</p>
           </div>
         ))}
+      </div>
+      <h2 className="mt-8 text-lg font-bold">Scheduled video calls</h2>
+      <div className="card mt-3 overflow-x-auto p-0">
+        <table className="table">
+          <thead><tr><th>When</th><th>Customer</th><th>Topic</th><th></th></tr></thead>
+          <tbody>
+            {calls.length === 0 && <tr><td colSpan={4} className="text-slate-500">No video calls scheduled. Set a time on a virtual visit to schedule one.</td></tr>}
+            {calls.map((v) => (
+              <tr key={v.id}>
+                <td className="font-semibold">{v.scheduledAt && fmtAppointment(v.scheduledAt)}</td>
+                <td><Link className="underline" href={`/admin/visits/${v.id}`}>{v.name}</Link><br /><span className="text-slate-500">{v.phone}</span></td>
+                <td>{v.topic || "–"}</td>
+                <td><Link className="btn btn-primary" href={`/admin/call/${v.id}`}>Open call room</Link></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
       <h2 className="mt-8 text-lg font-bold">Upcoming jobs</h2>
       <div className="card mt-3 overflow-x-auto p-0">

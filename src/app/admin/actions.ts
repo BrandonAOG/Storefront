@@ -12,7 +12,8 @@ import { endSession, passwordMatches, requireAdmin, startSession } from "@/lib/a
 import { AUTOMATIONS } from "@/lib/automations";
 import { runDailyJobs } from "@/lib/cron";
 import { upsertCustomer } from "@/lib/customers";
-import { membershipChanged, orderChanged, orderConfirmed, quoteSent } from "@/lib/notify";
+import { zoneToDate } from "@/lib/format";
+import { membershipChanged, orderChanged, orderConfirmed, quoteSent, visitScheduled } from "@/lib/notify";
 import { rateLimit } from "@/lib/ratelimit";
 import { parseZips } from "@/lib/settings";
 import { checkWebhookUrl, WEBHOOK_EVENTS } from "@/lib/webhooks";
@@ -213,9 +214,17 @@ export async function updateOrder(fd: FormData) {
 export async function updateVisit(fd: FormData) {
   await requireAdmin();
   const id = uuid.parse(fd.get("id"));
-  const status = z.enum(["new", "scheduled", "done", "closed"]).parse(fd.get("status"));
+  let status = z.enum(["new", "scheduled", "done", "closed"]).parse(fd.get("status"));
+  const [before] = await db().select().from(schema.visits).where(eq(schema.visits.id, id));
+  if (!before) redirect("/admin/visits");
+  // Date and time are typed in the business's time zone. Clearing either clears the appointment.
+  const scheduledAt = zoneToDate(str(fd, "schedDay", 10), str(fd, "schedTime", 5));
+  const timeChanged = (scheduledAt?.getTime() ?? 0) !== (before.scheduledAt?.getTime() ?? 0);
+  // Setting a time on a new request marks it scheduled.
+  if (scheduledAt && timeChanged && status === "new") status = "scheduled";
   // Only https links are stored, so the link can never be a javascript: URL.
-  await db().update(schema.visits).set({ status, meetingUrl: httpsUrl(fd, "meetingUrl"), adminNotes: str(fd, "adminNotes", 2000) }).where(eq(schema.visits.id, id));
+  await db().update(schema.visits).set({ status, scheduledAt, meetingUrl: httpsUrl(fd, "meetingUrl"), adminNotes: str(fd, "adminNotes", 2000) }).where(eq(schema.visits.id, id));
+  if (scheduledAt && timeChanged && scheduledAt.getTime() > Date.now()) after(() => visitScheduled(id));
   redirect(`/admin/visits/${id}?saved=1`);
 }
 

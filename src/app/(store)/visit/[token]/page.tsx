@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { MediaUploader } from "@/components/MediaUploader";
+import { fmtAppointment } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,19 @@ export default async function VisitStatus({ params }: { params: Promise<{ token:
             ? `Thanks, ${v.name.split(" ")[0]}. Add a short video or a few photos below and we'll review them and send your estimate.`
             : `Thanks, ${v.name.split(" ")[0]}. We'll contact you to confirm a time. Save this page: you'll join your video call from here.`}
         </p>
+        {open && v.scheduledAt && (
+          <p className="mt-4 rounded-xl bg-cream p-4 font-display font-bold">Your video call is {fmtAppointment(v.scheduledAt)} (Eastern time).</p>
+        )}
+        {open && (
+          <div className="mt-4 rounded-xl border border-slate-200 p-4 text-sm">
+            <p className="font-semibold">Before your call, please have ready:</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-700">
+              <li>A sheet of printer paper and some tape. We&apos;ll ask you to tape it flat where we need to measure.</li>
+              <li>A tape measure or ruler, if you have one.</li>
+              <li>A clear path to your electrical panel, your gas or propane meter, and where the generator would go.</li>
+            </ul>
+          </div>
+        )}
         {open && (
           <div className="mt-5">
             <a href={`/call/${token}`} className="btn btn-primary w-full py-3 text-base sm:w-auto">Join video call</a>

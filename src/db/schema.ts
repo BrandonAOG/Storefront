@@ -193,6 +193,11 @@ export const visits = pgTable("visits", {
   token: text("token").unique(),
   /** live = scheduled call, async = customer sends a video for review. */
   mode: text("mode").notNull().default("live"),
+  /** The agreed time of the video call. */
+  scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+  /** Last time each side had the call page open; used to show "customer is waiting". */
+  customerSeenAt: timestamp("customer_seen_at", { withTimezone: true }),
+  repSeenAt: timestamp("rep_seen_at", { withTimezone: true }),
   customerId: uuid("customer_id"),
   ...attribution,
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

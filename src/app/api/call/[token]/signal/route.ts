@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { postSignal, readSignals } from "@/lib/call";
+import { markSeen, postSignal, readSignals } from "@/lib/call";
 import { rateLimit } from "@/lib/ratelimit";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   if (!v) return new NextResponse(null, { status: 404 });
   const q = new URL(req.url).searchParams;
   const after = Math.max(0, Number.parseInt(q.get("after") ?? "0", 10) || 0);
+  await markSeen(v.id, "customer");
   return NextResponse.json(await readSignals(v.id, "customer", after, q.get("init") === "1"), { headers: { "Cache-Control": "no-store" } });
 }
 

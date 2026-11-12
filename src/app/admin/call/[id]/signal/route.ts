@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { isAdmin } from "@/lib/auth";
-import { postSignal, readSignals } from "@/lib/call";
+import { markSeen, postSignal, readSignals } from "@/lib/call";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +18,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!v) return new NextResponse(null, { status: 401 });
   const q = new URL(req.url).searchParams;
   const after = Math.max(0, Number.parseInt(q.get("after") ?? "0", 10) || 0);
+  await markSeen(v.id, "rep");
   return NextResponse.json(await readSignals(v.id, "rep", after, q.get("init") === "1"), { headers: { "Cache-Control": "no-store" } });
 }
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WaitingBanner } from "@/components/WaitingBanner";
 import { requireAdmin } from "@/lib/auth";
 import { logout } from "../actions";
 
@@ -35,6 +36,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <form action={logout}><button className="text-slate-300 hover:text-white">Sign out</button></form>
         </div>
       </header>
+      <WaitingBanner />
       <div className="mx-auto max-w-6xl px-4 py-8">{children}</div>
     </div>
   );

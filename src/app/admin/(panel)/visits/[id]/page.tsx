@@ -5,7 +5,7 @@ import { db, schema } from "@/db";
 import { Saved, Select, Status } from "@/components/admin";
 import { VisitReview } from "@/components/VisitReview";
 import { requireAdmin } from "@/lib/auth";
-import { fmtDateTime, fmtDay, money } from "@/lib/format";
+import { fmtAppointment, fmtDateTime, fmtDay, money, zoneDay, zoneTime } from "@/lib/format";
 import { appUrl } from "@/lib/stripe";
 import type { MeasureMeta } from "@/components/MeasureTool";
 import { addVisitNote, deleteVisitNote, saveMeasurements, updateVisit } from "../../../actions";
@@ -49,6 +49,14 @@ export default async function VisitDetail({ params, searchParams }: { params: Pr
         </div>
         <form action={updateVisit} className="card space-y-3 text-sm">
           <input type="hidden" name="id" value={v.id} />
+          <fieldset>
+            <legend className="label">Video call time (Eastern)</legend>
+            <div className="grid grid-cols-2 gap-2">
+              <input className="input" type="date" name="schedDay" aria-label="Call date" defaultValue={v.scheduledAt ? zoneDay(v.scheduledAt) : ""} />
+              <input className="input" type="time" name="schedTime" aria-label="Call time" step={300} defaultValue={v.scheduledAt ? zoneTime(v.scheduledAt) : ""} />
+            </div>
+            <span className="mt-1 block text-xs text-slate-500">{v.scheduledAt ? `Scheduled for ${fmtAppointment(v.scheduledAt)}. ` : ""}Saving a new time emails the customer the time and their join link.</span>
+          </fieldset>
           <label className="block"><span className="label">Status</span><Select name="status" value={v.status} options={["new", "scheduled", "done", "closed"]} /></label>
           <label className="block"><span className="label">Meeting link (https://…)</span><input className="input" name="meetingUrl" type="url" maxLength={500} defaultValue={v.meetingUrl} placeholder="Zoom, Google Meet or Teams link" /><span className="mt-1 block text-xs text-slate-500">Optional. Only needed if you&apos;d rather use Zoom, Meet or Teams than the built-in call room.</span></label>
           <label className="block"><span className="label">Internal notes</span><textarea className="input" name="adminNotes" rows={3} maxLength={2000} defaultValue={v.adminNotes} /></label>

@@ -1,7 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { fmtDay, fmtWindow, money } from "./format";
+import { fmtAppointment, fmtDay, fmtWindow, money } from "./format";
 import { alertOwner, sendAutomation } from "./messaging";
 import { membershipOut, orderOut, quoteOut, visitOut } from "./serialize";
 import { getSettings } from "./settings";
@@ -52,6 +52,15 @@ export const visitCreated = (visitId: string) =>
     if (customer) await sendAutomation({ key: "visit_received", refId: v.id, customer, settings, vars: { link: `${appUrl()}/visit/${v.token}` } });
     await alertOwner(settings, `visit:${v.id}`, `New virtual visit request${v.topic ? `: ${v.topic}` : ""}`, `${v.name} asked for a ${v.mode === "async" ? "video review" : "live virtual visit"}.\n\n${appUrl()}/admin/visits/${v.id}`);
     await emit("visit.created", visitOut(v));
+  });
+
+export const visitScheduled = (visitId: string) =>
+  guard("visitScheduled", async () => {
+    const [v] = await db().select().from(schema.visits).where(eq(schema.visits.id, visitId));
+    if (!v?.scheduledAt || !v.token) return;
+    const [settings, customer] = await Promise.all([getSettings(), customerById(v.customerId)]);
+    // refId includes the time, so changing the time sends a fresh message.
+    if (customer) await sendAutomation({ key: "visit_scheduled", refId: `${v.id}:${v.scheduledAt.getTime()}`, customer, settings, vars: { when: fmtAppointment(v.scheduledAt), link: `${appUrl()}/visit/${v.token}` } });
   });
 
 export const membershipChanged = (id: string, event: "membership.created" | "membership.active" | "membership.cancelled") =>

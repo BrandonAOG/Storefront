@@ -119,6 +119,8 @@ All editable in Admin → Messages.
 | Message | Sent |
 | --- | --- |
 | Booking confirmation | Immediately |
+| Video call scheduled | When you set or change the call time |
+| Video call reminder | The morning of the call |
 | Virtual visit received | Immediately, with the upload link |
 | Estimate delivery | When you press "Save and send" |
 | Plan welcome | Immediately |
@@ -150,6 +152,16 @@ booking.
 - **Call room:** open a virtual visit in the admin area and press **Open call room**.
   The customer presses **Join video call** on their visit page (or you send them
   the link shown in the room). Nothing to install on either side.
+- **Scheduling:** set the call date and time on the visit (Eastern time). The
+  customer is emailed the time, their join link and what to have ready (a sheet
+  of printer paper, tape, a tape measure), and gets a reminder the morning of
+  the call. Scheduled calls are listed on the admin Overview.
+- **Customer waiting alert:** if a customer joins and nobody is in the call room,
+  every open admin page shows a "is waiting in the video call" banner with a
+  Join button, plays a short chime (after you have clicked somewhere on the
+  page) and changes the tab title. It checks every 15 seconds around a scheduled
+  call and every 5 minutes otherwise. It can only alert a computer that has the
+  admin area open.
 - **How it connects:** the two browsers swap small setup messages through this
   app, then audio and video flow directly between them. Nothing is recorded and
   no video passes through or is stored on the server.

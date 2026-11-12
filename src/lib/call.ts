@@ -40,6 +40,38 @@ export async function readSignals(visitId: string, me: Role, after: number, init
   return { cursor: rows.length ? rows[rows.length - 1].id : after, messages: rows };
 }
 
+/**
+ * Notes that one side has the call page open right now. Written at most every
+ * 10 seconds per side, so the constant polling during a call stays cheap.
+ */
+export async function markSeen(visitId: string, role: Role) {
+  const col = role === "rep" ? schema.visits.repSeenAt : schema.visits.customerSeenAt;
+  await db()
+    .update(schema.visits)
+    .set(role === "rep" ? { repSeenAt: new Date() } : { customerSeenAt: new Date() })
+    .where(and(eq(schema.visits.id, visitId), sql`(${col} is null or ${col} < now() - interval '10 seconds')`));
+}
+
+/** Customers who have the call page open while nobody on your side is in the room. */
+export async function waitingCustomers() {
+  const v = schema.visits;
+  return db()
+    .select({ id: v.id, name: v.name })
+    .from(v)
+    .where(and(sql`${v.customerSeenAt} > now() - interval '25 seconds'`, sql`(${v.repSeenAt} is null or ${v.repSeenAt} < now() - interval '25 seconds')`))
+    .limit(5);
+}
+
+/** True when a video call is scheduled within the next 30 minutes or started in the last 60. */
+export async function callDueSoon(): Promise<boolean> {
+  const v = schema.visits;
+  const [row] = await db()
+    .select({ n: sql<number>`count(*)::int` })
+    .from(v)
+    .where(and(eq(v.status, "scheduled"), sql`${v.scheduledAt} between now() - interval '60 minutes' and now() + interval '30 minutes'`));
+  return (row?.n ?? 0) > 0;
+}
+
 /** Housekeeping, called by the daily job. */
 export async function purgeOldSignals() {
   await db().delete(schema.visitSignals).where(sql`${schema.visitSignals.createdAt} < now() - interval '1 day'`);

@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { and, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { loadAutomations } from "./automations";
-import { fmtDay, fmtWindow } from "./format";
+import { fmtDay, fmtWindow, TIME_ZONE } from "./format";
 import { purgeOldSignals } from "./call";
 import { retryMessages, sendAutomation } from "./messaging";
 import { getSettings } from "./settings";
@@ -38,6 +38,21 @@ export async function runDailyJobs() {
       await sendAutomation({ key: a.key, refId: r.order.id, customer: r.customer, settings, vars: { day: fmtDay(r.order.day, true), window: fmtWindow(r.order.startMin, r.order.endMin), address: `${r.order.address}, ${r.order.city} ${r.order.zip}`, link: `${base}/order/${r.order.token}` } });
     }
     done.reminders = rows.length;
+  }
+
+  a = on("visit_reminder");
+  if (a) {
+    const v = schema.visits;
+    const rows = await db()
+      .select({ visit: v, customer: c })
+      .from(v)
+      .innerJoin(c, eq(c.id, v.customerId))
+      .where(and(eq(v.status, "scheduled"), isNotNull(v.scheduledAt), isNotNull(v.token), sql`(${v.scheduledAt} at time zone ${TIME_ZONE})::date = (now() at time zone ${TIME_ZONE})::date`, sql`${v.scheduledAt} > now()`));
+    for (const r of rows) {
+      const time = r.visit.scheduledAt!.toLocaleTimeString("en-US", { timeZone: TIME_ZONE, hour: "numeric", minute: "2-digit" });
+      await sendAutomation({ key: a.key, refId: `${r.visit.id}:${r.visit.scheduledAt!.getTime()}`, customer: r.customer, settings, vars: { time, link: `${base}/visit/${r.visit.token}` } });
+    }
+    done.visitReminders = rows.length;
   }
 
   a = on("review_request");

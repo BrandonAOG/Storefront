@@ -38,7 +38,7 @@ export function CustomerRoom({ token, business, firstName, iceServers }: { token
               : "This device doesn't have a camera we can use, so we can hear you but not see your site. Open this same link on your phone to show us with its camera."}</p>}
 
       <p role="status" className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-6 text-center text-sm font-semibold">
-        {call.status === "connected" ? `Connected with ${business}` : statusText[call.status]}
+        {call.status === "connected" ? `Connected with ${business}` : call.status === "waiting" ? `We've let ${business} know you're here. Please stay on this page.` : statusText[call.status]}
       </p>
 
       {/* The specialist, small, in the corner. */}
