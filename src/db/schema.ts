@@ -205,8 +205,31 @@ export const visitMedia = pgTable("visit_media", {
   name: text("name").notNull().default(""),
   contentType: text("content_type").notNull().default(""),
   size: integer("size").notNull().default(0),
+  /** upload = sent by the customer, snapshot = captured by you during a video call. */
+  kind: text("kind").notNull().default("upload"),
+  /** Measurements drawn on an image: scale reference plus measured lines. */
+  meta: jsonb("meta"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Short-lived messages the two sides of a video call exchange to connect
+ * directly to each other (WebRTC signaling). No audio or video is stored here.
+ */
+export const visitSignals = pgTable(
+  "visit_signals",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    visitId: uuid("visit_id").notNull().references(() => visits.id, { onDelete: "cascade" }),
+    /** rep | customer */
+    fromRole: text("from_role").notNull(),
+    /** ready | offer | answer | ice | bye */
+    kind: text("kind").notNull(),
+    payload: jsonb("payload"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("visit_signals_idx").on(t.visitId, t.id)],
+);
 
 /** Reviewer notes on a visit; atSeconds pins a note to a moment in a video. */
 export const visitNotes = pgTable("visit_notes", {

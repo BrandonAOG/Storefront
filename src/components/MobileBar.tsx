@@ -11,7 +11,7 @@ import { useCart } from "./Cart";
 export function MobileBar({ tel, phone }: { tel: string; phone: string }) {
   const pathname = usePathname();
   const { count } = useCart();
-  if (/^\/(book|quote|visit|feedback|unsubscribe|order|virtual-visit)|^\/plans\/./.test(pathname)) return null;
+  if (/^\/(book|quote|visit|call|feedback|unsubscribe|order|virtual-visit)|^\/plans\/./.test(pathname)) return null;
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
       <div className="mx-auto flex max-w-md gap-2">

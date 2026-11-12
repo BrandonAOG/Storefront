@@ -19,7 +19,8 @@ Built with Next.js 16 (App Router), TypeScript, Tailwind CSS, Postgres
 | `/order/<token>` | Private booking confirmation |
 | `/plans`, `/plans/<name>` | Compare plans and subscribe; members can update their card or cancel |
 | `/virtual-visit` | Ask for a live call, or send a video for review |
-| `/visit/<token>` | Customer's visit page: upload photos and video, join the meeting |
+| `/visit/<token>` | Customer's visit page: join the video call, upload photos and video |
+| `/call/<token>` | Customer's side of the video call |
 | `/quote/<token>` | Personal estimate: tick optional add-ons, accept, pay a deposit |
 | `/feedback/<token>` | 0–10 score and comment; happy customers are sent to your review page |
 | `/unsubscribe/<token>` | Stop reminders and offers |
@@ -30,7 +31,7 @@ Built with Next.js 16 (App Router), TypeScript, Tailwind CSS, Postgres
 | --- | --- |
 | Overview | Upcoming jobs and headline numbers |
 | Bookings | Every booking; mark completed, paid, cancelled |
-| Virtual visits | Requests, the customer's photos and video, notes pinned to moments in a video, "turn into an estimate" |
+| Virtual visits | Requests, built-in video call room with snapshots, measuring on photos, the customer's uploads, notes, "turn into an estimate" |
 | Estimates | Build, send, track opened and accepted |
 | Memberships | Plan sign-ups and their status |
 | Customers | One record per customer with full history, notes and message preferences |
@@ -144,6 +145,28 @@ booking.
 - **API** is read-only: `GET /api/v1/orders|customers|visits|quotes|memberships|feedback`
   with `Authorization: Bearer <key>`, optional `?limit=` and `?since=`.
 
+## Video calls, snapshots and measuring
+
+- **Call room:** open a virtual visit in the admin area and press **Open call room**.
+  The customer presses **Join video call** on their visit page (or you send them
+  the link shown in the room). Nothing to install on either side.
+- **How it connects:** the two browsers swap small setup messages through this
+  app, then audio and video flow directly between them. Nothing is recorded and
+  no video passes through or is stored on the server.
+- **Networks:** direct connections work on most home and mobile networks. Some
+  cellular and office networks block them; to cover those, add a TURN relay
+  service by setting `TURN_URLS` (comma-separated `turn:` or `turns:` addresses),
+  `TURN_USERNAME` and `TURN_CREDENTIAL`.
+- **Snapshots:** press **Snapshot** during a call to save a still of the
+  customer's camera to the visit. Quality matches the live video, so ask the
+  customer to hold steady.
+- **Measuring:** open any snapshot or customer photo, drag a line over something
+  of known size and enter that size, then drag lines to measure. Results are
+  estimates: they are only accurate for things at the same distance and angle as
+  the reference. Confirm on site.
+- While a call is open each side checks for messages every 1 to 3 seconds, which
+  counts toward your hosting plan's function usage.
+
 ## Tracking and A/B testing
 
 Each storefront visitor gets an anonymous random id in a first-party cookie
@@ -203,5 +226,5 @@ In **Admin → Settings**, "Charged at checkout" sets pay-in-full (100) or a dep
 - Direct two-way sync with a specific dispatch or calendar product; use webhooks or the API.
 - Customer self-service rescheduling or cancellation.
 - Individual admin accounts; there is one shared password.
-- Built-in video calling; you paste in a Zoom, Meet or Teams link.
-- Drawing on top of a video; review notes are text pinned to a moment in the video.
+- Call recording, screen sharing and group calls (calls are one customer and one specialist).
+- Automatic or AR measuring; measurements are drawn by hand against a reference of known size.

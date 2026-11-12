@@ -7,7 +7,8 @@ import { VisitReview } from "@/components/VisitReview";
 import { requireAdmin } from "@/lib/auth";
 import { fmtDateTime, fmtDay, money } from "@/lib/format";
 import { appUrl } from "@/lib/stripe";
-import { addVisitNote, deleteVisitNote, updateVisit } from "../../../actions";
+import type { MeasureMeta } from "@/components/MeasureTool";
+import { addVisitNote, deleteVisitNote, saveMeasurements, updateVisit } from "../../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,13 @@ export default async function VisitDetail({ params, searchParams }: { params: Pr
       <h1 className="mt-2 text-2xl font-bold">{v.name} <Status value={v.status} /></h1>
       <p className="text-sm text-slate-500">{v.mode === "async" ? "Video review" : "Live call"} requested {fmtDateTime(v.createdAt)} · came from {v.source}</p>
       <div className="mt-4"><Saved show={(await searchParams).saved === "1"} /></div>
+      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl bg-ink p-4 text-white">
+        <div className="flex-1">
+          <p className="font-display font-bold">Video call</p>
+          <p className="text-sm text-slate-300">See the customer&apos;s camera, take snapshots and measure from them. The customer joins from their visit page.</p>
+        </div>
+        <Link href={`/admin/call/${v.id}`} className="btn btn-primary">Open call room</Link>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="card text-sm">
@@ -42,7 +50,7 @@ export default async function VisitDetail({ params, searchParams }: { params: Pr
         <form action={updateVisit} className="card space-y-3 text-sm">
           <input type="hidden" name="id" value={v.id} />
           <label className="block"><span className="label">Status</span><Select name="status" value={v.status} options={["new", "scheduled", "done", "closed"]} /></label>
-          <label className="block"><span className="label">Meeting link (https://…)</span><input className="input" name="meetingUrl" type="url" maxLength={500} defaultValue={v.meetingUrl} placeholder="Zoom, Google Meet or Teams link" /><span className="mt-1 block text-xs text-slate-500">Shown on the customer&apos;s page as a “Join” button.</span></label>
+          <label className="block"><span className="label">Meeting link (https://…)</span><input className="input" name="meetingUrl" type="url" maxLength={500} defaultValue={v.meetingUrl} placeholder="Zoom, Google Meet or Teams link" /><span className="mt-1 block text-xs text-slate-500">Optional. Only needed if you&apos;d rather use Zoom, Meet or Teams than the built-in call room.</span></label>
           <label className="block"><span className="label">Internal notes</span><textarea className="input" name="adminNotes" rows={3} maxLength={2000} defaultValue={v.adminNotes} /></label>
           <div className="flex items-center gap-3">
             <button className="btn btn-dark">Save</button>
@@ -52,10 +60,11 @@ export default async function VisitDetail({ params, searchParams }: { params: Pr
       </div>
 
       <div className="card mt-4">
-        <h2 className="mb-3 font-bold">Photos and video from the customer</h2>
+        <h2 className="mb-3 font-bold">Photos, video and call snapshots</h2>
         <VisitReview
           visitId={v.id}
-          media={media.map((m) => ({ id: m.id, url: m.url, name: m.name, contentType: m.contentType }))}
+          media={media.map((m) => ({ id: m.id, url: m.url, name: m.name, contentType: m.contentType, kind: m.kind, meta: (m.meta as MeasureMeta | null) ?? null }))}
+          saveMeasure={saveMeasurements}
           notes={notes.map((n) => ({ id: n.id, mediaId: n.mediaId, atSeconds: n.atSeconds, body: n.body }))}
           addNote={addVisitNote}
           deleteNote={deleteVisitNote}

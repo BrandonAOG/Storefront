@@ -4,6 +4,7 @@ import { and, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { loadAutomations } from "./automations";
 import { fmtDay, fmtWindow } from "./format";
+import { purgeOldSignals } from "./call";
 import { retryMessages, sendAutomation } from "./messaging";
 import { getSettings } from "./settings";
 import { addDays, todayLocal } from "./slots";
@@ -27,6 +28,8 @@ export async function runDailyJobs() {
   // Housekeeping first, so reminders never go to stale bookings.
   done.staleCheckouts = (await db().update(o).set({ status: "cancelled" }).where(and(eq(o.status, "pending"), lt(o.createdAt, sql`now() - interval '2 hours'`))).returning({ id: o.id })).length;
   done.expiredQuotes = (await db().update(schema.quotes).set({ status: "expired" }).where(and(eq(schema.quotes.status, "sent"), lt(schema.quotes.expiresDay, todayLocal()))).returning({ id: schema.quotes.id })).length;
+
+  await purgeOldSignals();
 
   let a = on("appointment_reminder");
   if (a) {

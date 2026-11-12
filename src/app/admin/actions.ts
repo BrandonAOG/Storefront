@@ -231,6 +231,34 @@ export async function addVisitNote(fd: FormData) {
   redirect(`/admin/visits/${visitId}`);
 }
 
+/** Add a note from the call room and return the updated list (no page reload mid-call). */
+export async function addCallNote(visitId: string, body: string) {
+  await requireAdmin();
+  const id = uuid.parse(visitId);
+  const text = String(body ?? "").trim().slice(0, 1000);
+  if (text) await db().insert(schema.visitNotes).values({ visitId: id, body: text });
+  const rows = await db().select({ id: schema.visitNotes.id, body: schema.visitNotes.body }).from(schema.visitNotes).where(eq(schema.visitNotes.visitId, id)).orderBy(schema.visitNotes.createdAt);
+  return rows;
+}
+
+const linePoints = { ax: z.number().finite(), ay: z.number().finite(), bx: z.number().finite(), by: z.number().finite() };
+const measureSchema = z.object({
+  w: z.number().int().positive().max(20000),
+  h: z.number().int().positive().max(20000),
+  scale: z.object({ ...linePoints, inches: z.number().positive().max(100000) }).nullable(),
+  lines: z.array(z.object(linePoints)).max(40),
+});
+
+/** Save the scale and measured lines drawn on a photo or snapshot. */
+export async function saveMeasurements(mediaId: string, meta: unknown): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  const id = uuid.safeParse(mediaId);
+  const parsed = measureSchema.safeParse(meta);
+  if (!id.success || !parsed.success) return { ok: false };
+  const changed = await db().update(schema.visitMedia).set({ meta: parsed.data }).where(eq(schema.visitMedia.id, id.data)).returning({ id: schema.visitMedia.id });
+  return { ok: changed.length > 0 };
+}
+
 export async function deleteVisitNote(fd: FormData) {
   await requireAdmin();
   const visitId = uuid.parse(fd.get("visitId"));

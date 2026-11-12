@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { MeasureTool, type MeasureMeta } from "./MeasureTool";
 
-type Media = { id: string; url: string; name: string; contentType: string };
+type Media = { id: string; url: string; name: string; contentType: string; kind: string; meta: MeasureMeta | null };
 type Note = { id: string; mediaId: string | null; atSeconds: number | null; body: string };
 type Props = {
   visitId: string;
@@ -10,12 +11,13 @@ type Props = {
   notes: Note[];
   addNote: (fd: FormData) => Promise<void>;
   deleteNote: (fd: FormData) => Promise<void>;
+  saveMeasure: (id: string, meta: MeasureMeta) => Promise<{ ok: boolean }>;
 };
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 /** Watch the customer's files and pin notes to moments in a video. */
-export function VisitReview({ visitId, media, notes, addNote, deleteNote }: Props) {
+export function VisitReview({ visitId, media, notes, addNote, deleteNote, saveMeasure }: Props) {
   const [current, setCurrent] = useState(media[0]?.id ?? "");
   const [at, setAt] = useState<number | null>(null);
   const video = useRef<HTMLVideoElement>(null);
@@ -36,15 +38,14 @@ export function VisitReview({ visitId, media, notes, addNote, deleteNote }: Prop
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
       <div>
-        {!active && <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">The customer hasn&apos;t added any photos or video yet.</p>}
+        {!active && <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">No photos, video or snapshots yet.</p>}
         {active && isVideo && <video key={active.id} ref={video} src={active.url} controls playsInline className="max-h-[480px] w-full rounded-xl bg-black" />}
-        {/* eslint-disable-next-line @next/next/no-img-element -- customer upload shown at its stored address */}
-        {active && !isVideo && <img src={active.url} alt={active.name} className="max-h-[480px] w-full rounded-xl bg-slate-100 object-contain" />}
+        {active && !isVideo && <MeasureTool key={active.id} mediaId={active.id} url={active.url} name={active.name} initial={active.meta} save={saveMeasure} />}
         {media.length > 1 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {media.map((m, i) => (
               <button key={m.id} type="button" onClick={() => { setCurrent(m.id); setAt(null); }} className={`rounded-lg border px-3 py-1 text-xs font-semibold ${m.id === current ? "border-ink bg-ink text-white" : "border-slate-300 bg-white"}`}>
-                {m.contentType.startsWith("video/") ? "Video" : "Photo"} {i + 1}
+                {m.contentType.startsWith("video/") ? "Video" : m.kind === "snapshot" ? "Snapshot" : "Photo"} {i + 1}
               </button>
             ))}
           </div>

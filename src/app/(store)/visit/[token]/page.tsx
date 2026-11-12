@@ -25,8 +25,14 @@ export default async function VisitStatus({ params }: { params: Promise<{ token:
         <p className="mt-2 text-slate-600">
           {v.mode === "async"
             ? `Thanks, ${v.name.split(" ")[0]}. Add a short video or a few photos below and we'll review them and send your estimate.`
-            : `Thanks, ${v.name.split(" ")[0]}. We'll contact you to confirm a time. Save this page: your meeting link will appear here.`}
+            : `Thanks, ${v.name.split(" ")[0]}. We'll contact you to confirm a time. Save this page: you'll join your video call from here.`}
         </p>
+        {open && (
+          <div className="mt-5">
+            <a href={`/call/${token}`} className="btn btn-primary w-full py-3 text-base sm:w-auto">Join video call</a>
+            <p className="mt-2 text-sm text-slate-600">Use this at your appointment time. It opens your camera so you can show us your site. Nothing to install.</p>
+          </div>
+        )}
         {/^https:\/\//i.test(v.meetingUrl) && open && (
           <a href={v.meetingUrl} target="_blank" rel="noopener noreferrer" className="btn btn-dark mt-5">Join your virtual visit ↗</a>
         )}

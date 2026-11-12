@@ -15,6 +15,13 @@
       "when": 1794411650825,
       "tag": "0001_mature_black_tom",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794504106354,
+      "tag": "0002_hesitant_red_skull",
+      "breakpoints": true
     }
   ]
 }
