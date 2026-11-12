@@ -19,6 +19,8 @@ export type CallState = {
   /** Whether this device is sending a camera picture / microphone sound at all. */
   hasCamera: boolean;
   hasMic: boolean;
+  /** Why there is no camera picture: the device has none, or something else is using it. */
+  cameraProblem: "" | "missing" | "busy";
 };
 
 /**
@@ -40,7 +42,7 @@ class CallEngine {
   private alive = false;
 
   constructor(private opts: Options) {
-    this.state = { status: "idle", error: "", local: null, remote: null, muted: false, cameraOff: false, facing: opts.role === "customer" ? "environment" : "user", hasCamera: false, hasMic: false };
+    this.state = { status: "idle", error: "", local: null, remote: null, muted: false, cameraOff: false, facing: opts.role === "customer" ? "environment" : "user", hasCamera: false, hasMic: false, cameraProblem: "" };
   }
 
   subscribe = (fn: () => void) => {
@@ -172,6 +174,8 @@ class CallEngine {
         this.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video });
       } catch (err) {
         if (denied(err)) throw err;
+        // NotReadable / Abort = the camera exists but is in use; anything else = no camera on this device.
+        this.set({ cameraProblem: err instanceof Error && /NotReadable|Abort|TrackStart/.test(err.name) ? "busy" : "missing" });
         try {
           // No usable camera: carry on with sound only.
           this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
