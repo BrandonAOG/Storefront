@@ -26,9 +26,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   await requireAdmin();
   return (
     <div className="flex-1">
-      <header className="border-b border-slate-800 bg-slate-950 text-white">
+      <header className="border-b border-black bg-ink text-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 text-sm">
-          <span className="font-bold">AOG Admin</span>
+          <span className="font-display font-extrabold text-brand">AOG Admin</span>
           {nav.map(([href, label]) => <Link key={href} href={href} className="text-slate-300 hover:text-white">{label}</Link>)}
           <span className="flex-1" />
           <Link href="/" className="text-slate-300 hover:text-white">View store ↗</Link>

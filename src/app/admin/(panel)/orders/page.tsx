@@ -19,7 +19,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       <h1 className="text-2xl font-bold">Bookings</h1>
       <div className="mt-3 flex flex-wrap gap-2 text-sm">
         {FILTERS.map((f) => (
-          <Link key={f} href={f === "all" ? "/admin/orders" : `/admin/orders?status=${f}`} className={`rounded-full px-3 py-1 font-semibold capitalize ${f === filter ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-700"}`}>{f}</Link>
+          <Link key={f} href={f === "all" ? "/admin/orders" : `/admin/orders?status=${f}`} className={`rounded-full px-3 py-1 font-semibold capitalize ${f === filter ? "bg-ink text-white" : "bg-slate-200 text-slate-700"}`}>{f}</Link>
         ))}
       </div>
       <div className="card mt-4 overflow-x-auto p-0">

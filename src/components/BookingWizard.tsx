@@ -106,7 +106,7 @@ export function BookingWizard({ services, serviceZips, depositPercent, payOnline
       <div>
         <ol className="mb-6 flex flex-wrap gap-2 text-xs font-semibold">
           {STEPS.map((label, i) => (
-            <li key={label} className={`rounded-full px-3 py-1 ${i === step ? "bg-slate-900 text-white" : i < step ? "bg-amber-100 text-amber-900" : "bg-slate-200 text-slate-500"}`}>
+            <li key={label} className={`rounded-full px-3 py-1 ${i === step ? "bg-ink text-white" : i < step ? "bg-amber-100 text-amber-900" : "bg-slate-200 text-slate-500"}`}>
               {i + 1}. {label}
             </li>
           ))}
@@ -183,7 +183,7 @@ export function BookingWizard({ services, serviceZips, depositPercent, payOnline
                         type="button"
                         disabled={!open}
                         onClick={() => { setDay(d.day); setStartMin(null); }}
-                        className={`shrink-0 rounded-xl border px-3 py-2 text-sm font-semibold ${d.day === day ? "border-slate-900 bg-slate-900 text-white" : open ? "border-slate-300 bg-white hover:border-slate-500" : "border-slate-200 bg-slate-100 text-slate-400 line-through"}`}
+                        className={`shrink-0 rounded-xl border px-3 py-2 text-sm font-semibold ${d.day === day ? "border-ink bg-ink text-white" : open ? "border-slate-300 bg-white hover:border-slate-500" : "border-slate-200 bg-slate-100 text-slate-400 line-through"}`}
                       >
                         {fmtDay(d.day)}
                       </button>
@@ -197,7 +197,7 @@ export function BookingWizard({ services, serviceZips, depositPercent, payOnline
                       type="button"
                       disabled={!s.available}
                       onClick={() => setStartMin(s.startMin)}
-                      className={`rounded-xl border px-4 py-3 text-left text-sm font-semibold ${s.startMin === startMin ? "border-amber-500 bg-amber-50 ring-2 ring-amber-200" : s.available ? "border-slate-300 bg-white hover:border-slate-500" : "border-slate-200 bg-slate-100 text-slate-400"}`}
+                      className={`rounded-xl border px-4 py-3 text-left text-sm font-semibold ${s.startMin === startMin ? "border-ink bg-cream ring-2 ring-brand" : s.available ? "border-slate-300 bg-white hover:border-slate-500" : "border-slate-200 bg-slate-100 text-slate-400"}`}
                     >
                       {fmtWindow(s.startMin, s.endMin)}
                       {!s.available && <span className="ml-2 font-normal">Full</span>}

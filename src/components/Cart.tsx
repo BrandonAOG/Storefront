@@ -82,7 +82,7 @@ export function CartButton() {
   const { count } = useCart();
   return (
     <Link href="/book" className="btn btn-primary">
-      Book now{count > 0 && <span className="rounded-full bg-slate-950 px-2 py-0.5 text-xs text-white">{count}</span>}
+      Book now{count > 0 && <span className="rounded-full bg-black px-2 py-0.5 text-xs text-white">{count}</span>}
     </Link>
   );
 }

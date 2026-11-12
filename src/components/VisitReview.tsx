@@ -43,7 +43,7 @@ export function VisitReview({ visitId, media, notes, addNote, deleteNote }: Prop
         {media.length > 1 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {media.map((m, i) => (
-              <button key={m.id} type="button" onClick={() => { setCurrent(m.id); setAt(null); }} className={`rounded-lg border px-3 py-1 text-xs font-semibold ${m.id === current ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white"}`}>
+              <button key={m.id} type="button" onClick={() => { setCurrent(m.id); setAt(null); }} className={`rounded-lg border px-3 py-1 text-xs font-semibold ${m.id === current ? "border-ink bg-ink text-white" : "border-slate-300 bg-white"}`}>
                 {m.contentType.startsWith("video/") ? "Video" : "Photo"} {i + 1}
               </button>
             ))}

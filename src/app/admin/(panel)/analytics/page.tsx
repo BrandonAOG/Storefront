@@ -52,7 +52,7 @@ export default async function AnalyticsAdmin({ searchParams }: { searchParams: P
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Analytics</h1>
         <div className="flex gap-2 text-sm">
-          {RANGES.map((d) => <Link key={d} href={`/admin/analytics?days=${d}`} className={`rounded-full px-3 py-1 font-semibold ${d === days ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-700"}`}>{d} days</Link>)}
+          {RANGES.map((d) => <Link key={d} href={`/admin/analytics?days=${d}`} className={`rounded-full px-3 py-1 font-semibold ${d === days ? "bg-ink text-white" : "bg-slate-200 text-slate-700"}`}>{d} days</Link>)}
         </div>
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-4">
@@ -66,7 +66,7 @@ export default async function AnalyticsAdmin({ searchParams }: { searchParams: P
           {steps.map(([label, n], i) => (
             <div key={label}>
               <div className="flex justify-between text-sm"><span className="font-medium">{label}</span><span>{n}{i > 0 && <span className="text-slate-500"> · {pct(n, steps[i - 1][1])} of previous</span>}</span></div>
-              <div className="mt-1 h-3 rounded-full bg-slate-100"><div className="h-3 rounded-full bg-amber-500" style={{ width: `${Math.max(n ? 1.5 : 0, (n / top) * 100)}%` }} /></div>
+              <div className="mt-1 h-3 rounded-full bg-slate-100"><div className="h-3 rounded-full bg-brand" style={{ width: `${Math.max(n ? 1.5 : 0, (n / top) * 100)}%` }} /></div>
             </div>
           ))}
         </div>

@@ -56,14 +56,14 @@ export default async function Home() {
 
   return (
     <>
-      <section className="bg-slate-950 text-white">
+      <section className="bg-ink text-white">
         <div className="mx-auto max-w-6xl px-4 py-16 md:py-24">
           <p className="text-sm font-semibold uppercase tracking-widest text-brand">Open 24/7 online</p>
-          <h1 className="mt-3 max-w-3xl text-4xl font-bold tracking-tight md:text-6xl">{headline}</h1>
+          <h1 className="mt-3 max-w-3xl text-4xl font-extrabold tracking-tight md:text-6xl">{headline}</h1>
           <p className="mt-5 max-w-2xl text-lg text-slate-300">{sub}</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="#services" className="btn btn-primary px-6 py-3 text-base">See services &amp; prices</Link>
-            <Link href="/virtual-visit" className="btn border border-slate-600 px-6 py-3 text-base text-white hover:bg-slate-800">Book a virtual visit</Link>
+            <Link href="/virtual-visit" className="btn bg-cream px-6 py-3 text-base text-black hover:bg-white">Book a virtual visit</Link>
           </div>
         </div>
       </section>
@@ -108,7 +108,7 @@ export default async function Home() {
             </div>
             <div className="mt-6 grid gap-4 md:grid-cols-3">
               {plans.slice(0, 3).map((p) => (
-                <Link key={p.id} href={`/plans/${p.slug}`} className="card transition hover:border-amber-400">
+                <Link key={p.id} href={`/plans/${p.slug}`} className="card transition hover:border-ink">
                   <h3 className="font-semibold">{p.name}</h3>
                   <p className="mt-1 text-sm text-slate-600">{p.summary}</p>
                   <p className="mt-3 text-2xl font-bold">{money(p.priceCents)}<span className="text-sm font-medium text-slate-500"> / {p.interval}</span></p>
@@ -120,10 +120,10 @@ export default async function Home() {
       )}
 
       <section className="mx-auto max-w-6xl px-4 py-14">
-        <div className="rounded-3xl bg-slate-950 p-8 text-white md:p-12">
+        <div className="rounded-2xl bg-brand p-8 text-black md:p-12">
           <h2 className="text-3xl font-bold tracking-tight">Thinking about a new generator?</h2>
-          <p className="mt-3 max-w-2xl text-slate-300">Start with a virtual visit. Show us your electrical panel and where the unit would sit, and we&apos;ll size it and prepare a quote without a site trip.</p>
-          <Link href="/virtual-visit" className="btn btn-primary mt-6 px-6 py-3 text-base">Request a virtual visit</Link>
+          <p className="mt-3 max-w-2xl text-black/80">Start with a virtual visit. Show us your electrical panel and where the unit would sit, and we&apos;ll size it and prepare a quote without a site trip.</p>
+          <Link href="/virtual-visit" className="btn btn-dark mt-6 px-6 py-3 text-base">Request a virtual visit</Link>
         </div>
       </section>
 

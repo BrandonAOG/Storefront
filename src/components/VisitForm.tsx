@@ -33,7 +33,7 @@ export function VisitForm({ topics, initialTopic, minDay, uploads }: { topics: s
         <fieldset className="mb-5 grid gap-2 sm:grid-cols-2">
           <legend className="label">How would you like to do it?</legend>
           {([["live", "Live call", "We schedule a video or phone call with you."], ["async", "Send a video", "Record your site on your phone and we reply with an estimate."]] as const).map(([value, title, text]) => (
-            <label key={value} className={`cursor-pointer rounded-xl border p-3 text-sm ${mode === value ? "border-amber-500 bg-amber-50 ring-2 ring-amber-200" : "border-slate-300"}`}>
+            <label key={value} className={`cursor-pointer rounded-xl border p-3 text-sm ${mode === value ? "border-ink bg-cream ring-2 ring-brand" : "border-slate-300"}`}>
               <input type="radio" name="mode" className="sr-only" checked={mode === value} onChange={() => setMode(value)} />
               <span className="block font-semibold">{title}</span>
               <span className="text-slate-600">{text}</span>

@@ -43,7 +43,7 @@ export function FeedbackForm({ token, reviewUrl }: { token: string; reviewUrl: s
       <p className="mt-2 text-slate-600">How likely are you to recommend us to a friend or neighbor?</p>
       <div className="mt-5 grid grid-cols-11 gap-1" role="radiogroup" aria-label="Score from 0 to 10">
         {Array.from({ length: 11 }, (_, n) => (
-          <button key={n} type="button" role="radio" aria-checked={score === n} onClick={() => setScore(n)} className={`rounded-lg border py-2 text-sm font-semibold ${score === n ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white hover:border-slate-500"}`}>
+          <button key={n} type="button" role="radio" aria-checked={score === n} onClick={() => setScore(n)} className={`rounded-lg border py-2 text-sm font-semibold ${score === n ? "border-ink bg-ink text-white" : "border-slate-300 bg-white hover:border-slate-500"}`}>
             {n}
           </button>
         ))}
