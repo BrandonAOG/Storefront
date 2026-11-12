@@ -169,6 +169,21 @@ booking.
   cellular and office networks block them; to cover those, add a TURN relay
   service by setting `TURN_URLS` (comma-separated `turn:` or `turns:` addresses),
   `TURN_USERNAME` and `TURN_CREDENTIAL`.
+- **Call controls (your side):** microphone, camera, snapshot, show your screen,
+  ask for the customer's location, notes, end. The small arrows pick which
+  microphone, speaker or camera to use. **Fit / Fill** and the zoom buttons
+  change how the customer's picture is shown; a phone held upright gives a tall
+  narrow picture, so ask the customer to turn it sideways for a wide one.
+- **Pointer:** click the customer's picture and a ring appears at that spot on
+  their screen, so you can say "show me this".
+- **Screen share:** shows your screen to the customer full size. Works from a
+  computer browser.
+- **Location:** the pin asks the customer to share where they are. Nothing is
+  sent unless they tap Share, and their phone asks them again. It is saved on
+  the visit with a map link.
+- **Customer extras:** flip camera, and a flashlight button on phones whose
+  browser allows it (mostly Android; iPhone Safari does not).
+- A note with the call length is added to the visit when you end a call.
 - **Snapshots:** press **Snapshot** during a call to save a still of the
   customer's camera to the visit. Quality matches the live video, so ask the
   customer to hold steady.
@@ -241,5 +256,5 @@ In **Admin → Settings**, "Charged at checkout" sets pay-in-full (100) or a dep
 - Direct two-way sync with a specific dispatch or calendar product; use webhooks or the API.
 - Customer self-service rescheduling or cancellation.
 - Individual admin accounts; there is one shared password.
-- Call recording, screen sharing and group calls (calls are one customer and one specialist).
+- Call recording and group calls (calls are one customer and one specialist).
 - Automatic or AR measuring; measurements are drawn by hand against a reference of known size.

@@ -44,6 +44,9 @@ export default async function VisitDetail({ params, searchParams }: { params: Pr
           {v.topic && <p className="mt-2"><strong>Topic:</strong> {v.topic}</p>}
           {(v.preferredDay || v.preferredTime) && <p><strong>Prefers:</strong> {v.preferredDay && fmtDay(v.preferredDay, true)} {v.preferredTime}</p>}
           {v.details && <p className="mt-2 whitespace-pre-line rounded-lg bg-slate-100 p-3">{v.details}</p>}
+          {v.lat !== null && v.lng !== null && (
+            <p className="mt-2"><strong>Location shared on call:</strong> <a className="underline" href={`https://www.google.com/maps?q=${v.lat.toFixed(6)},${v.lng.toFixed(6)}`} target="_blank" rel="noopener noreferrer">Open on map ↗</a> <span className="text-slate-500">(about {v.locAccuracy ?? 0} m)</span></p>
+          )}
           {v.customerId && <p className="mt-3"><Link className="underline" href={`/admin/customers/${v.customerId}`}>Customer history →</Link></p>}
           {v.token && <p className="mt-1 break-all text-slate-500">Customer&apos;s page: <a className="underline" href={`${appUrl()}/visit/${v.token}`} target="_blank" rel="noopener noreferrer">{appUrl()}/visit/{v.token.slice(0, 8)}…</a></p>}
         </div>
@@ -53,7 +56,7 @@ export default async function VisitDetail({ params, searchParams }: { params: Pr
             <legend className="label">Video call time (Eastern)</legend>
             <div className="grid grid-cols-2 gap-2">
               <input className="input" type="date" name="schedDay" aria-label="Call date" defaultValue={v.scheduledAt ? zoneDay(v.scheduledAt) : ""} />
-              <input className="input" type="time" name="schedTime" aria-label="Call time" step={300} defaultValue={v.scheduledAt ? zoneTime(v.scheduledAt) : ""} />
+              <input className="input" type="time" name="schedTime" aria-label="Call time" defaultValue={v.scheduledAt ? zoneTime(v.scheduledAt) : ""} />
             </div>
             <span className="mt-1 block text-xs text-slate-500">{v.scheduledAt ? `Scheduled for ${fmtAppointment(v.scheduledAt)}. ` : ""}Saving a new time emails the customer the time and their join link.</span>
           </fieldset>

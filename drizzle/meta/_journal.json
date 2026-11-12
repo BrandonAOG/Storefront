@@ -29,6 +29,13 @@
       "when": 1794508155365,
       "tag": "0003_organic_black_bird",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794509208431,
+      "tag": "0004_rich_venom",
+      "breakpoints": true
     }
   ]
 }

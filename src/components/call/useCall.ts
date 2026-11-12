@@ -7,6 +7,15 @@ type Role = "rep" | "customer";
 type Facing = "environment" | "user";
 type Signal = { id: number; kind: "ready" | "offer" | "answer" | "ice" | "bye"; payload: { sid?: string; sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit } | null };
 type Options = { role: Role; signalUrl: string; iceServers: RTCIceServer[] };
+export type Device = { id: string; label: string };
+export type Shared = { lat: number; lng: number; accuracy: number };
+/** Small messages sent directly between the two browsers during a call. */
+type Control =
+  | { t: "point"; x: number; y: number }
+  | { t: "share"; on: boolean }
+  | { t: "video"; on: boolean }
+  | { t: "locate" }
+  | { t: "location"; lat?: number; lng?: number; accuracy?: number; declined?: boolean };
 
 export type CallState = {
   status: CallStatus;
@@ -21,28 +30,57 @@ export type CallState = {
   hasMic: boolean;
   /** Why there is no camera picture: the device has none, or something else is using it. */
   cameraProblem: "" | "missing" | "busy";
+  /** Rep: this computer's screen is being shown to the customer. Customer: the rep is showing their screen. */
+  sharing: boolean;
+  /** Customer: the rep is currently sending a picture (camera or screen), not just sound. */
+  repVideo: boolean;
+  /** Devices to choose from, and which are in use. */
+  mics: Device[];
+  cameras: Device[];
+  speakers: Device[];
+  micId: string;
+  cameraId: string;
+  speakerId: string;
+  /** A "look here" mark on the customer's picture (0..1 across and down), with when it was set. */
+  pointer: { x: number; y: number; at: number } | null;
+  /** Customer: the rep has asked to see their location. */
+  locationAsked: boolean;
+  /** Rep: what came back. */
+  location: Shared | "asked" | "declined" | null;
+  /** Customer: phone flashlight available / on. */
+  torch: "unsupported" | "off" | "on";
 };
+
+const initial = (role: Role): CallState => ({
+  status: "idle", error: "", local: null, remote: null, muted: false, cameraOff: false, facing: role === "customer" ? "environment" : "user",
+  hasCamera: false, hasMic: false, cameraProblem: "", sharing: false, repVideo: false, mics: [], cameras: [], speakers: [], micId: "", cameraId: "", speakerId: "",
+  pointer: null, locationAsked: false, location: null, torch: "unsupported",
+});
 
 /**
  * One-to-one video call between you (rep) and a customer.
  *
  * The two browsers send each other small setup messages through the server
- * (signalUrl), then audio and video flow directly between them. The rep always
- * makes the offer and the customer answers. Every offer carries a session id
- * (sid) so late messages from an earlier attempt are ignored.
+ * (signalUrl), then audio, video and control messages flow directly between
+ * them. The rep always makes the offer and the customer answers. Every offer
+ * carries a session id (sid) so late messages from an earlier attempt are ignored.
  */
 class CallEngine {
   private state: CallState;
   private listeners = new Set<() => void>();
   private pc: RTCPeerConnection | null = null;
+  private dc: RTCDataChannel | null = null;
   private stream: MediaStream | null = null;
+  private screen: MediaStreamTrack | null = null;
+  /** Rep: the last location the customer actually shared in this call. */
+  private shared: Shared | null = null;
   private sid = "";
   private cursor = 0;
   private pendingIce: RTCIceCandidateInit[] = [];
   private alive = false;
 
   constructor(private opts: Options) {
-    this.state = { status: "idle", error: "", local: null, remote: null, muted: false, cameraOff: false, facing: opts.role === "customer" ? "environment" : "user", hasCamera: false, hasMic: false, cameraProblem: "" };
+    this.state = initial(opts.role);
   }
 
   subscribe = (fn: () => void) => {
@@ -59,24 +97,80 @@ class CallEngine {
     return fetch(this.opts.signalUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, payload }), keepalive: kind === "bye" }).catch(() => undefined);
   }
 
+  private control(msg: Control) {
+    if (this.dc?.readyState === "open") this.dc.send(JSON.stringify(msg));
+  }
+
+  private onControl = (raw: unknown) => {
+    let m: Control;
+    try {
+      m = JSON.parse(String(raw));
+    } catch {
+      return;
+    }
+    const num = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+    if (m.t === "point" && num(m.x) && num(m.y)) this.set({ pointer: { x: Math.min(1, Math.max(0, m.x)), y: Math.min(1, Math.max(0, m.y)), at: Date.now() } });
+    else if (m.t === "share" && this.opts.role === "customer") this.set({ sharing: Boolean(m.on) });
+    else if (m.t === "video" && this.opts.role === "customer") this.set({ repVideo: Boolean(m.on) });
+    else if (m.t === "locate" && this.opts.role === "customer") this.set({ locationAsked: true });
+    else if (m.t === "location" && this.opts.role === "rep") {
+      // A "no thanks" never wipes out a location the customer already shared.
+      if (m.declined || !num(m.lat) || !num(m.lng)) this.set({ location: this.shared ?? "declined" });
+      else {
+        this.shared = { lat: m.lat!, lng: m.lng!, accuracy: num(m.accuracy) ? m.accuracy! : 0 };
+        this.set({ location: this.shared });
+      }
+    }
+  };
+
+  private wireChannel(ch: RTCDataChannel) {
+    this.dc = ch;
+    ch.onmessage = (e) => this.onControl(e.data);
+    // Tell a customer who (re)connects whether a screen share is already running.
+    ch.onopen = () => {
+      if (this.opts.role === "rep") this.tellVideo();
+    };
+  }
+
+  /** Rep: tell the customer whether a picture is being sent, and whether it is the screen. */
+  private tellVideo() {
+    const camOn = Boolean(this.stream?.getVideoTracks().length) && !this.state.cameraOff;
+    this.control({ t: "share", on: this.state.sharing });
+    this.control({ t: "video", on: this.state.sharing || camOn });
+  }
+
   private closePeer() {
     this.pc?.close();
     this.pc = null;
+    this.dc = null;
     this.pendingIce = [];
-    this.set({ remote: null });
+    this.set({ remote: null, pointer: null });
+  }
+
+  /** The outgoing sender for sound or picture, whether or not it has a track yet. */
+  private sender(kind: "audio" | "video") {
+    return this.pc?.getTransceivers().find((t) => t.sender.track?.kind === kind || t.receiver.track?.kind === kind)?.sender;
   }
 
   private newPeer() {
     this.closePeer();
     const p = new RTCPeerConnection({ iceServers: this.opts.iceServers });
     this.pc = p;
-    this.stream?.getTracks().forEach((t) => p.addTrack(t, this.stream!));
     if (this.opts.role === "rep") {
-      // The rep makes the offer, and an offer only asks for what it lists. If this
-      // computer has no camera (or no microphone), still ask to RECEIVE the
-      // customer's picture and sound; otherwise their video would never be sent.
-      if (!this.stream?.getVideoTracks().length) p.addTransceiver("video", { direction: "recvonly" });
-      if (!this.stream?.getAudioTracks().length) p.addTransceiver("audio", { direction: "recvonly" });
+      // The rep makes the offer, and an offer only covers what it lists. Always
+      // set up two-way sound and picture, even with no microphone or camera on
+      // this computer, so the customer's video is received and a screen share
+      // or a device plugged in later can be sent without reconnecting.
+      const audio = this.stream?.getAudioTracks()[0];
+      const video = this.screen ?? this.stream?.getVideoTracks()[0];
+      if (audio) p.addTrack(audio, this.stream!);
+      else p.addTransceiver("audio", { direction: "sendrecv" });
+      if (video) p.addTrack(video, this.stream!);
+      else p.addTransceiver("video", { direction: "sendrecv" });
+      this.wireChannel(p.createDataChannel("control"));
+    } else {
+      this.stream?.getTracks().forEach((t) => p.addTrack(t, this.stream!));
+      p.ondatachannel = (e) => this.wireChannel(e.channel);
     }
     p.onicecandidate = (e) => {
       if (e.candidate) void this.send("ice", { sid: this.sid, candidate: e.candidate.toJSON() });
@@ -118,7 +212,7 @@ class CallEngine {
     const { role } = this.opts;
     if (m.kind === "bye") {
       this.closePeer();
-      this.set({ status: "waiting" });
+      this.set({ status: "waiting", sharing: role === "rep" ? this.state.sharing : false, repVideo: false, locationAsked: false });
     } else if (m.kind === "ready") {
       // The other side just arrived (or reloaded): start a fresh connection.
       if (role === "rep") await this.offer();
@@ -162,6 +256,25 @@ class CallEngine {
     if (this.alive) setTimeout(this.poll, this.state.status === "connected" ? 3000 : 1000);
   };
 
+  /** Lists microphones, cameras and speakers. Names only appear once permission has been given. */
+  refreshDevices = async () => {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      const of = (kind: MediaDeviceKind, fallback: string) =>
+        all.filter((d) => d.kind === kind && d.deviceId).map((d, i) => ({ id: d.deviceId, label: d.label || `${fallback} ${i + 1}` }));
+      const settings = (t?: MediaStreamTrack) => t?.getSettings().deviceId ?? "";
+      this.set({
+        mics: of("audioinput", "Microphone"),
+        cameras: of("videoinput", "Camera"),
+        speakers: of("audiooutput", "Speaker"),
+        micId: settings(this.stream?.getAudioTracks()[0]),
+        cameraId: settings(this.stream?.getVideoTracks()[0]),
+      });
+    } catch {
+      /* device list not available in this browser */
+    }
+  };
+
   /** Must be called from a button press so the browser allows camera, microphone and sound. */
   start = async () => {
     if (this.alive) return;
@@ -185,8 +298,11 @@ class CallEngine {
           this.stream = new MediaStream();
         }
       }
-      const hasCamera = this.stream.getVideoTracks().length > 0;
-      this.set({ local: this.stream, hasCamera, hasMic: this.stream.getAudioTracks().length > 0, cameraOff: !hasCamera });
+      const cam = this.stream.getVideoTracks()[0];
+      const caps = (cam?.getCapabilities?.() ?? {}) as { torch?: boolean };
+      this.set({ local: this.stream, hasCamera: Boolean(cam), hasMic: this.stream.getAudioTracks().length > 0, cameraOff: !cam, torch: caps.torch ? "off" : "unsupported" });
+      void this.refreshDevices();
+      navigator.mediaDevices.addEventListener?.("devicechange", this.refreshDevices);
       const init = await fetch(`${this.opts.signalUrl}?init=1`).then((r) => (r.ok ? r.json() : Promise.reject(new Error("signal"))));
       this.cursor = init.cursor;
       this.alive = true;
@@ -214,9 +330,12 @@ class CallEngine {
     this.alive = false;
     void this.send("bye");
     this.closePeer();
+    this.screen?.stop();
+    this.screen = null;
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
-    this.set({ status: "ended", local: null });
+    navigator.mediaDevices.removeEventListener?.("devicechange", this.refreshDevices);
+    this.set({ status: "ended", local: null, sharing: false, locationAsked: false });
   };
 
   toggleMute = () => {
@@ -229,23 +348,120 @@ class CallEngine {
     const cameraOff = !this.state.cameraOff;
     this.stream?.getVideoTracks().forEach((t) => (t.enabled = !cameraOff));
     this.set({ cameraOff });
+    if (this.opts.role === "rep") this.tellVideo();
   };
+
+  /** Swap one of this device's own tracks for a new one, in the call and in the local preview. */
+  private async swapTrack(kind: "audio" | "video", track: MediaStreamTrack, sendIt: boolean) {
+    const old = kind === "audio" ? this.stream?.getAudioTracks()[0] : this.stream?.getVideoTracks()[0];
+    if (sendIt) await (this.sender(kind) ?? this.pc?.getSenders().find((s) => s.track === old))?.replaceTrack(track);
+    if (old) {
+      this.stream?.removeTrack(old);
+      old.stop();
+    }
+    this.stream ??= new MediaStream();
+    this.stream.addTrack(track);
+    this.set({ local: new MediaStream(this.stream.getTracks()) });
+  }
 
   /** Switch between the back and front camera without dropping the call. */
   flipCamera = async () => {
     const next: Facing = this.state.facing === "environment" ? "user" : "environment";
-    const old = this.stream?.getVideoTracks()[0];
     try {
       // Phones can't open both cameras at once, so release the current one first.
-      old?.stop();
+      this.stream?.getVideoTracks()[0]?.stop();
       const fresh = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: next }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
       const track = fresh.getVideoTracks()[0];
-      await this.pc?.getSenders().find((s) => s.track?.kind === "video" || s.track === old)?.replaceTrack(track);
-      if (old) this.stream?.removeTrack(old);
-      this.stream?.addTrack(track);
-      this.set({ facing: next, cameraOff: false, hasCamera: true, local: new MediaStream(this.stream?.getTracks() ?? [track]) });
+      await this.swapTrack("video", track, true);
+      const caps = (track.getCapabilities?.() ?? {}) as { torch?: boolean };
+      this.set({ facing: next, cameraOff: false, hasCamera: true, torch: caps.torch ? "off" : "unsupported" });
     } catch {
       /* this device has only one camera */
+    }
+  };
+
+  pickMic = async (id: string) => {
+    try {
+      const fresh = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: id } } });
+      const track = fresh.getAudioTracks()[0];
+      track.enabled = !this.state.muted;
+      await this.swapTrack("audio", track, true);
+      this.set({ hasMic: true, micId: id });
+      void this.refreshDevices();
+    } catch {
+      this.set({ error: "That microphone couldn't be opened." });
+    }
+  };
+
+  pickCamera = async (id: string) => {
+    try {
+      const fresh = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: id }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+      // While the screen is being shared, keep sending the screen; the new camera takes over when sharing stops.
+      await this.swapTrack("video", fresh.getVideoTracks()[0], !this.screen);
+      this.set({ hasCamera: true, cameraOff: false, cameraId: id, cameraProblem: "" });
+      if (this.opts.role === "rep") this.tellVideo();
+      void this.refreshDevices();
+    } catch {
+      this.set({ error: "That camera couldn't be opened." });
+    }
+  };
+
+  pickSpeaker = (id: string) => this.set({ speakerId: id });
+
+  /** Show this computer's screen to the customer in place of the camera. */
+  startShare = async () => {
+    if (this.screen || !navigator.mediaDevices?.getDisplayMedia) return;
+    try {
+      const display = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      this.screen = display.getVideoTracks()[0];
+      // The browser's own "Stop sharing" button ends it too.
+      this.screen.onended = () => void this.stopShare();
+      await this.sender("video")?.replaceTrack(this.screen);
+      this.set({ sharing: true });
+      this.tellVideo();
+    } catch {
+      /* the person cancelled the screen picker */
+    }
+  };
+
+  stopShare = async () => {
+    if (!this.screen) return;
+    this.screen.onended = null;
+    this.screen.stop();
+    this.screen = null;
+    await this.sender("video")?.replaceTrack(this.stream?.getVideoTracks()[0] ?? null).catch(() => undefined);
+    this.set({ sharing: false });
+    this.tellVideo();
+  };
+
+  /** Rep: mark a spot on the customer's picture so they know where to aim. */
+  point = (x: number, y: number) => {
+    this.set({ pointer: { x, y, at: Date.now() } });
+    this.control({ t: "point", x, y });
+  };
+
+  /** Rep: ask the customer to share where they are. They choose whether to. */
+  requestLocation = () => {
+    this.set({ location: "asked" });
+    this.control({ t: "locate" });
+  };
+
+  /** Customer: reply to that request. */
+  answerLocation = (shared: Shared | null) => {
+    this.set({ locationAsked: false });
+    this.control(shared ? { t: "location", ...shared } : { t: "location", declined: true });
+  };
+
+  /** Customer: phone flashlight, on phones and browsers that allow it. */
+  toggleTorch = async () => {
+    const track = this.stream?.getVideoTracks()[0];
+    if (!track || this.state.torch === "unsupported") return;
+    const on = this.state.torch !== "on";
+    try {
+      await track.applyConstraints({ advanced: [{ torch: on } as MediaTrackConstraintSet] });
+      this.set({ torch: on ? "on" : "off" });
+    } catch {
+      this.set({ torch: "unsupported" });
     }
   };
 
@@ -254,6 +470,7 @@ class CallEngine {
     if (this.alive) void this.send("bye");
     this.alive = false;
     this.pc?.close();
+    this.screen?.stop();
     this.stream?.getTracks().forEach((t) => t.stop());
   };
 }
@@ -268,5 +485,10 @@ export function useCall(opts: Options) {
       engine.dispose();
     };
   }, [engine]);
-  return { ...state, start: engine.start, hangUp: engine.hangUp, toggleMute: engine.toggleMute, toggleCamera: engine.toggleCamera, flipCamera: engine.flipCamera };
+  return {
+    ...state,
+    start: engine.start, hangUp: engine.hangUp, toggleMute: engine.toggleMute, toggleCamera: engine.toggleCamera, flipCamera: engine.flipCamera,
+    pickMic: engine.pickMic, pickCamera: engine.pickCamera, pickSpeaker: engine.pickSpeaker, startShare: engine.startShare, stopShare: engine.stopShare,
+    point: engine.point, requestLocation: engine.requestLocation, answerLocation: engine.answerLocation, toggleTorch: engine.toggleTorch,
+  };
 }

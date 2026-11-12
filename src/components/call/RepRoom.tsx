@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { MeasureTool, type MeasureMeta } from "../MeasureTool";
-import { CallButton, statusText, Video } from "./Video";
-import { useCall } from "./useCall";
+import { Icon } from "./Icons";
+import { CallButton, frameFromClick, frameToBox, PointerMark, statusText, Video } from "./Video";
+import { useCall, type Device, type Shared } from "./useCall";
 
 type Shot = { id: string; url: string; name: string; meta: MeasureMeta | null };
 type Note = { id: string; body: string };
 type Props = {
-  visit: { id: string; name: string; phone: string; email: string; address: string; zip: string; topic: string; details: string };
+  visit: { id: string; name: string; phone: string; email: string; address: string; zip: string; topic: string; details: string; location: Shared | null };
   iceServers: RTCIceServer[];
   shots: Shot[];
   notes: Note[];
@@ -19,14 +20,56 @@ type Props = {
 };
 
 const clock = (s: number) => `${String(Math.floor(s / 3600)).padStart(2, "0")}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+const mapLink = (l: Shared) => `https://www.google.com/maps?q=${l.lat.toFixed(6)},${l.lng.toFixed(6)}`;
 
-function Section({ title, children, open = false }: { title: string; children: React.ReactNode; open?: boolean }) {
+function Section({ title, children, open = false, id }: { title: string; children: React.ReactNode; open?: boolean; id?: string }) {
   return (
-    <details className="border-b border-white/10" open={open}>
+    <details id={id} className="border-b border-white/10" open={open}>
       <summary className="cursor-pointer px-4 py-3 font-display text-sm font-bold">{title}</summary>
       <div className="px-4 pb-4 text-sm">{children}</div>
     </details>
   );
+}
+
+/** The little arrow beside a button: a list of devices to choose from. */
+function DeviceMenu({ label, groups }: { label: string; groups: { title: string; devices: Device[]; current: string; pick: (id: string) => void }[] }) {
+  const [open, setOpen] = useState(false);
+  const shown = groups.filter((g) => g.devices.length > 0);
+  return (
+    <div className="relative -ml-5 self-start">
+      <button type="button" aria-label={label} title={label} aria-expanded={open} disabled={shown.length === 0} onClick={() => setOpen(!open)} className="grid h-6 w-6 place-items-center rounded-full border border-slate-950 bg-slate-600 text-white hover:bg-slate-500 disabled:opacity-40">
+        <Icon name="chevron" className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <div role="menu" className="absolute bottom-8 left-0 z-30 w-72 rounded-xl border border-white/15 bg-slate-800 p-2 text-left text-sm shadow-xl">
+          {shown.map((g) => (
+            <div key={g.title} className="mb-1 last:mb-0">
+              <p className="px-2 py-1 text-xs font-bold uppercase tracking-wide text-slate-400">{g.title}</p>
+              {g.devices.map((d) => (
+                <button key={d.id} type="button" role="menuitemradio" aria-checked={d.id === g.current} onClick={() => { g.pick(d.id); setOpen(false); }} className={`block w-full truncate rounded-lg px-2 py-2 text-left hover:bg-white/10 ${d.id === g.current ? "font-bold text-brand" : ""}`}>
+                  {d.id === g.current ? "✓ " : ""}{d.label}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Shows the "look here" ring for a few seconds at the spot you clicked. */
+function TimedPointer({ pointer, video, fit }: { pointer: { x: number; y: number }; video: React.RefObject<HTMLVideoElement | null>; fit: "contain" | "cover" }) {
+  const [at, setAt] = useState<{ left: string; top: string } | null>(null);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setAt(frameToBox(video.current, pointer, fit)));
+    const t = setTimeout(() => setAt(null), 4000);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+    };
+  }, [pointer, video, fit]);
+  return at ? <PointerMark at={at} /> : null;
 }
 
 /** Your side of a virtual visit: the customer's camera, their details, snapshots and notes. */
@@ -40,7 +83,14 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
   const [flash, setFlash] = useState("");
   const [copied, setCopied] = useState(false);
   const [saving, startSaving] = useTransition();
+  // "Has a picture" means frames are actually arriving, not just that a video track exists.
+  const [hasPicture, setHasPicture] = useState(false);
+  const [fill, setFill] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [origin, setOrigin] = useState("50% 50%");
   const remoteVideo = useRef<HTMLVideoElement>(null);
+  const stage = useRef<HTMLDivElement>(null);
+  const noteBox = useRef<HTMLTextAreaElement>(null);
 
   const connected = call.status === "connected";
   useEffect(() => {
@@ -50,8 +100,8 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
   }, [connected]);
 
   const live = call.status === "waiting" || call.status === "connecting" || connected;
-  // "Has a picture" means frames are actually arriving, not just that a video track exists.
-  const [hasPicture, setHasPicture] = useState(false);
+  const fit = fill ? "cover" : "contain";
+  const location = call.location && typeof call.location === "object" ? call.location : visit.location;
 
   /** Grab the current frame of the customer's video at its full resolution. */
   const snapshot = async () => {
@@ -75,13 +125,35 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
     }
   };
 
-  const submitNote = () => {
-    const body = note.trim();
-    if (!body) return;
+  const saveNote = (body: string, clear = false) =>
     startSaving(async () => {
       setNotes(await addNote(visit.id, body));
-      setNote("");
+      if (clear) setNote("");
     });
+
+  /** Clicking the customer's picture marks that spot on their screen: "show me this". */
+  const pointAt = (e: React.MouseEvent) => {
+    const v = remoteVideo.current;
+    if (!v || !connected) return;
+    const p = frameFromClick(v, e.clientX, e.clientY, fit);
+    if (!p) return;
+    call.point(p.x, p.y);
+    // Zoom buttons zoom in on the last spot you clicked.
+    const box = stage.current?.getBoundingClientRect();
+    if (box && zoom === 1) setOrigin(`${((e.clientX - box.left) / box.width) * 100}% ${((e.clientY - box.top) / box.height) * 100}%`);
+  };
+
+  const end = () => {
+    call.hangUp();
+    // Keep a record of the call on the visit.
+    if (seconds >= 30) saveNote(`Video call held, ${Math.max(1, Math.round(seconds / 60))} min.`);
+  };
+
+  const openNotes = () => {
+    const box = document.getElementById("call-notes") as HTMLDetailsElement | null;
+    if (box) box.open = true;
+    noteBox.current?.scrollIntoView({ block: "center" });
+    noteBox.current?.focus();
   };
 
   return (
@@ -96,7 +168,7 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
       </header>
 
       <div className="grid flex-1 lg:grid-cols-[1fr_360px]">
-        <div className="relative flex min-h-[50vh] flex-col bg-black">
+        <div className="relative flex min-h-[50vh] min-w-0 flex-col bg-black">
           {!live ? (
             <div className="m-auto max-w-md p-6 text-center">
               <h1 className="text-2xl font-extrabold">{call.status === "ended" ? "Call ended" : "Ready to start"}</h1>
@@ -112,9 +184,31 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
             </div>
           ) : (
             <>
-              <Video ref={remoteVideo} stream={call.remote} onPicture={setHasPicture} className="h-full max-h-[calc(100dvh-9.5rem)] w-full flex-1 object-contain" />
-              {!hasPicture && <p className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-slate-400">{connected ? "Waiting for the customer's camera picture…" : statusText[call.status]}</p>}
-              {call.hasCamera ? (
+              <div ref={stage} className="relative flex-1 overflow-hidden" onClick={pointAt}>
+                <Video
+                  ref={remoteVideo}
+                  stream={call.remote}
+                  sinkId={call.speakerId}
+                  onPicture={setHasPicture}
+                  className={`absolute inset-0 h-full w-full cursor-crosshair ${fill ? "object-cover" : "object-contain"}`}
+                  style={{ transform: `scale(${zoom})`, transformOrigin: origin }}
+                />
+                {hasPicture && call.pointer && <TimedPointer key={call.pointer.at} pointer={call.pointer} video={remoteVideo} fit={fit} />}
+                {!hasPicture && <p className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-slate-400">{connected ? "Waiting for the customer's camera picture…" : statusText[call.status]}</p>}
+              </div>
+
+              {hasPicture && (
+                <div className="absolute top-3 right-3 z-10 flex gap-1 rounded-full bg-black/70 p-1 text-xs font-bold">
+                  <button type="button" className="rounded-full px-3 py-1.5 hover:bg-white/15" onClick={() => setFill(!fill)} title="Fit shows the whole picture; Fill uses the full width and trims the edges">{fill ? "Fit" : "Fill"}</button>
+                  <button type="button" className="rounded-full px-3 py-1.5 hover:bg-white/15 disabled:opacity-40" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => setZoom(Math.max(1, zoom - 0.5))}>−</button>
+                  <span className="grid min-w-9 place-items-center" aria-live="polite">{zoom}×</span>
+                  <button type="button" className="rounded-full px-3 py-1.5 hover:bg-white/15 disabled:opacity-40" aria-label="Zoom in" disabled={zoom >= 4} onClick={() => setZoom(Math.min(4, zoom + 0.5))}>+</button>
+                </div>
+              )}
+
+              {call.sharing ? (
+                <p className="absolute bottom-24 left-3 rounded-lg bg-brand px-3 py-2 text-xs font-bold text-black">You are showing your screen to the customer.</p>
+              ) : call.hasCamera ? (
                 <div className="absolute bottom-24 left-3 h-24 w-36 overflow-hidden rounded-lg border border-white/30 bg-slate-900">
                   <Video stream={call.local} muted mirror className="h-full w-full object-cover" />
                 </div>
@@ -123,42 +217,61 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
                   {call.hasMic ? "No camera on this computer. The customer can hear you but not see you." : "No camera or microphone on this computer. You can see and hear the customer, but they can't hear you."}
                 </p>
               )}
-              {flash && <p role="status" className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-black/80 px-4 py-1.5 text-sm">{flash}</p>}
-              <div className="flex justify-center gap-3 border-t border-white/10 bg-slate-950 p-3">
-                <CallButton onClick={call.toggleMute} label={call.muted ? "Unmute microphone" : "Mute microphone"} active={call.muted} disabled={!call.hasMic}>{call.muted ? "Unmute" : "Mute"}</CallButton>
-                <CallButton onClick={call.toggleCamera} label={call.cameraOff ? "Turn camera on" : "Turn camera off"} active={call.hasCamera && call.cameraOff} disabled={!call.hasCamera}>{call.hasCamera && !call.cameraOff ? "Cam off" : "Cam on"}</CallButton>
-                <CallButton onClick={() => void snapshot()} label="Take a snapshot of the customer's video" disabled={!hasPicture}>Snapshot</CallButton>
-                <CallButton onClick={call.hangUp} label="End call" danger>End</CallButton>
+              {(flash || call.error) && <p role="status" className="absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/80 px-4 py-1.5 text-sm">{call.error || flash}</p>}
+
+              <div className="flex flex-wrap items-center justify-center gap-3 border-t border-white/10 bg-slate-950 p-3">
+                <CallButton onClick={call.toggleMute} icon={call.muted || !call.hasMic ? "micOff" : "mic"} label={call.muted ? "Unmute microphone" : "Mute microphone"} active={call.muted} disabled={!call.hasMic} />
+                <DeviceMenu label="Choose microphone and speaker" groups={[{ title: "Microphone", devices: call.mics, current: call.micId, pick: (id) => void call.pickMic(id) }, { title: "Speaker", devices: call.speakers, current: call.speakerId, pick: call.pickSpeaker }]} />
+                <CallButton onClick={call.toggleCamera} icon={call.cameraOff || !call.hasCamera ? "camOff" : "cam"} label={call.cameraOff ? "Turn camera on" : "Turn camera off"} active={call.hasCamera && call.cameraOff} disabled={!call.hasCamera} />
+                <DeviceMenu label="Choose camera" groups={[{ title: "Camera", devices: call.cameras, current: call.cameraId, pick: (id) => void call.pickCamera(id) }]} />
+                <CallButton onClick={() => void snapshot()} icon="snap" label="Take a snapshot of the customer's video" disabled={!hasPicture} />
+                <CallButton onClick={() => void (call.sharing ? call.stopShare() : call.startShare())} icon="screen" label={call.sharing ? "Stop showing your screen" : "Show your screen to the customer"} active={call.sharing} disabled={!connected} />
+                <CallButton onClick={call.requestLocation} icon="pin" label="Ask the customer to share their location" active={call.location === "asked"} disabled={!connected} />
+                <CallButton onClick={openNotes} icon="notes" label="Write a note" />
+                <CallButton onClick={end} icon="end" label="End call" danger />
               </div>
             </>
           )}
         </div>
 
         <aside className="border-t border-white/10 bg-slate-900 lg:border-t-0 lg:border-l">
-          <Section title="Customer details">
+          <Section title="Customer details" open>
             <p><a className="underline" href={`tel:${visit.phone.replace(/[^\d+]/g, "")}`}>{visit.phone}</a><br /><span className="break-all">{visit.email}</span></p>
             {visit.address && <p className="mt-2">{visit.address} {visit.zip}</p>}
             {visit.topic && <p className="mt-2"><strong>Topic:</strong> {visit.topic}</p>}
             {visit.details && <p className="mt-2 whitespace-pre-line text-slate-300">{visit.details}</p>}
+            <p className="mt-3 border-t border-white/10 pt-3" role="status">
+              <strong>Location: </strong>
+              {location ? (
+                <><a className="text-brand underline" href={mapLink(location)} target="_blank" rel="noopener noreferrer">Open on map ↗</a><span className="block text-slate-400">Shared by the customer, accurate to about {Math.round(location.accuracy)} m</span></>
+              ) : call.location === "asked" ? "Asked. Waiting for the customer to tap Share…" : call.location === "declined" ? "The customer chose not to share it." : "Not shared. Press the pin button during the call to ask."}
+            </p>
           </Section>
           <Section title={`Snapshots (${shots.length})`} open>
-            {shots.length === 0 && <p className="text-slate-400">Press Snapshot during the call to save a still, then tap it to measure.</p>}
+            {shots.length === 0 && <p className="text-slate-400">Press the camera button during the call to save a still, then click it to measure.</p>}
             <div className="grid grid-cols-2 gap-2">
               {shots.map((s) => (
                 <button key={s.id} type="button" onClick={() => setOpen(s)} className="relative overflow-hidden rounded-lg border border-white/20 text-left" aria-label={`Open ${s.name} to measure`}>
                   {/* eslint-disable-next-line @next/next/no-img-element -- saved snapshot */}
                   <img src={s.url} alt="" className="aspect-video w-full object-cover" />
-                  <span className="block truncate bg-black/60 px-2 py-1 text-xs">{s.meta?.lines?.length ? `${s.meta.lines.length} measured` : "Tap to measure"}</span>
+                  <span className="block truncate bg-black/60 px-2 py-1 text-xs">{s.meta?.lines?.length ? `${s.meta.lines.length} measured` : "Click to measure"}</span>
                 </button>
               ))}
             </div>
           </Section>
-          <Section title={`Notes (${notes.length})`} open>
+          <Section title={`Notes (${notes.length})`} open id="call-notes">
             <ul className="mb-3 space-y-2">
               {notes.map((n) => <li key={n.id} className="whitespace-pre-line rounded-lg bg-white/10 p-2">{n.body}</li>)}
             </ul>
-            <textarea className="input" rows={3} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add notes…" aria-label="Add a note" />
-            <button type="button" className="btn btn-primary mt-2 w-full" disabled={saving || !note.trim()} onClick={submitNote}>{saving ? "Saving…" : "Add note"}</button>
+            <textarea ref={noteBox} className="input" rows={3} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add notes…" aria-label="Add a note" />
+            <button type="button" className="btn btn-primary mt-2 w-full" disabled={saving || !note.trim()} onClick={() => saveNote(note.trim(), true)}>{saving ? "Saving…" : "Add note"}</button>
+          </Section>
+          <Section title="Tips">
+            <ul className="list-disc space-y-1 pl-4 text-slate-300">
+              <li>Click the customer&apos;s picture to mark a spot on their screen.</li>
+              <li>Ask them to turn the phone sideways for a wider picture.</li>
+              <li>For measuring, have them tape a sheet of paper flat on the surface before you take the snapshot.</li>
+            </ul>
           </Section>
         </aside>
       </div>

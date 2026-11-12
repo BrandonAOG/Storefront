@@ -23,7 +23,7 @@ export default async function CallRoom({ params }: { params: Promise<{ id: strin
   ]);
   return (
     <RepRoom
-      visit={{ id: v.id, name: v.name, phone: v.phone, email: v.email, address: v.address, zip: v.zip, topic: v.topic, details: v.details }}
+      visit={{ id: v.id, name: v.name, phone: v.phone, email: v.email, address: v.address, zip: v.zip, topic: v.topic, details: v.details, location: v.lat !== null && v.lng !== null ? { lat: v.lat, lng: v.lng, accuracy: v.locAccuracy ?? 0 } : null }}
       iceServers={iceServers()}
       shots={media.filter((m) => m.contentType.startsWith("image/")).map((m) => ({ id: m.id, url: m.url, name: m.name || "Photo", meta: (m.meta as MeasureMeta | null) ?? null }))}
       notes={notes}

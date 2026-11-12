@@ -254,6 +254,20 @@ export async function attachVisitMedia(token: unknown, input: unknown): Promise<
   return { ok: true };
 }
 
+/** Saves the location a customer chose to share during a video call. */
+export async function saveVisitLocation(token: unknown, input: unknown): Promise<{ ok: boolean }> {
+  if (!isToken(token)) return { ok: false };
+  if (!(await rateLimit("location", 10, 600))) return { ok: false };
+  const parsed = z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180), accuracy: z.number().min(0).max(1_000_000) }).safeParse(input);
+  if (!parsed.success) return { ok: false };
+  const changed = await db()
+    .update(schema.visits)
+    .set({ lat: parsed.data.lat, lng: parsed.data.lng, locAccuracy: Math.round(parsed.data.accuracy), locAt: new Date() })
+    .where(and(eq(schema.visits.token, token), inArray(schema.visits.status, ["new", "scheduled"])))
+    .returning({ id: schema.visits.id });
+  return { ok: changed.length > 0 };
+}
+
 /** Customer accepts an estimate, choosing which optional items to include. */
 export async function acceptQuote(token: unknown, optionalIds: unknown): Promise<ActionResult> {
   if (!isToken(token)) return { ok: false, error: "Invalid link." };

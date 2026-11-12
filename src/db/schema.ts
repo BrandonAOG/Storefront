@@ -1,4 +1,4 @@
-import { bigserial, boolean, date, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigserial, boolean, date, doublePrecision, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 /** Where a visitor came from (first touch), copied onto whatever they create. */
 const attribution = {
@@ -197,6 +197,12 @@ export const visits = pgTable("visits", {
   scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
   /** Last time each side had the call page open; used to show "customer is waiting". */
   customerSeenAt: timestamp("customer_seen_at", { withTimezone: true }),
+  /** Where the customer was when they chose to share their location during a call. */
+  lat: doublePrecision("lat"),
+  lng: doublePrecision("lng"),
+  /** How precise that location is, in meters. */
+  locAccuracy: integer("loc_accuracy"),
+  locAt: timestamp("loc_at", { withTimezone: true }),
   repSeenAt: timestamp("rep_seen_at", { withTimezone: true }),
   customerId: uuid("customer_id"),
   ...attribution,
