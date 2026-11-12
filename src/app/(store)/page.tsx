@@ -60,15 +60,16 @@ export default async function Home() {
   return (
     <>
       <section className="bg-ink text-white">
-        <div className="mx-auto max-w-6xl px-4 py-16 md:py-24">
-          <p className="text-sm font-semibold uppercase tracking-widest text-brand">Open 24/7 online</p>
-          <h1 className="mt-3 max-w-3xl text-4xl font-extrabold tracking-tight md:text-6xl">{headline}</h1>
-          <p className="mt-5 max-w-2xl text-lg text-slate-300">{sub}</p>
-          <div className="mt-8 flex flex-wrap gap-3">
+        <div className="mx-auto max-w-4xl px-4 py-14 text-center md:py-20">
+          <p className="font-display text-sm font-extrabold uppercase tracking-wide text-brand sm:text-xl">{BRAND.tagline}</p>
+          <p className="glow-text mt-3 text-5xl leading-none sm:text-6xl md:text-7xl" aria-hidden>{BRAND.glow}</p>
+          <h1 className="mx-auto mt-5 max-w-3xl text-xl font-extrabold tracking-tight sm:text-2xl md:text-3xl">{headline}</h1>
+          <p className="mx-auto mt-4 max-w-2xl text-base text-slate-300 sm:text-lg">{sub}</p>
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Link href="#services" className="btn btn-primary px-6 py-3 text-base">Book service</Link>
             <Link href="/virtual-visit" className="btn bg-cream px-6 py-3 text-base text-black hover:bg-white">Free estimate</Link>
           </div>
-          <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm font-semibold text-cream">
+          <ul className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm font-semibold text-cream">
             {BRAND.badges.map((b) => <li key={b} className="flex items-center gap-2"><span className="text-brand" aria-hidden>✓</span>{b}</li>)}
           </ul>
         </div>

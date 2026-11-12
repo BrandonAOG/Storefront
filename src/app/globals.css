@@ -78,3 +78,38 @@ h3,
     @apply border-b border-slate-100 px-3 py-2.5 align-top;
   }
 }
+
+/* The "Always On!" power-up glow from alwaysongenerators.com: the words flicker
+   on like a light, then hold a warm glow. */
+@keyframes powerUp {
+  0% { opacity: 0.1; text-shadow: 0 0 0 transparent; }
+  15% { opacity: 0.3; text-shadow: 0 0 5px rgba(255, 220, 0, 0.4); }
+  20% { opacity: 0.15; text-shadow: 0 0 2px rgba(255, 220, 0, 0.2); }
+  45% { opacity: 0.8; text-shadow: 0 0 10px #ffd700, 0 0 20px #ffd700, 0 0 30px #ffae00; }
+  50% { opacity: 0.6; text-shadow: 0 0 8px #ffd700; }
+  100% { opacity: 1; text-shadow: 0 0 5px #fff, 0 0 15px #ffd700, 0 0 30px #ffb700, 0 0 45px #ff9900; }
+}
+
+.glow-text {
+  font-family: var(--font-display);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #fff;
+  opacity: 0;
+  animation: powerUp 1.5s ease-out 0.8s 1 forwards;
+}
+
+/* Soft warm glow under the header, as on the main site. */
+.glow-bar {
+  box-shadow: 0 3px 25px 6px rgba(255, 244, 200, 0.35);
+}
+
+/* People who ask their device for less motion get the lit state with no flicker. */
+@media (prefers-reduced-motion: reduce) {
+  .glow-text {
+    animation: none;
+    opacity: 1;
+    text-shadow: 0 0 5px #fff, 0 0 15px #ffd700, 0 0 30px #ffb700, 0 0 45px #ff9900;
+  }
+}

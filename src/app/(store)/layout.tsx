@@ -19,7 +19,7 @@ export default async function StoreLayout({ children }: { children: React.ReactN
           {s.phone && <a href={tel} className="shrink-0 py-1 font-bold text-brand hover:underline">Call {s.phone}</a>}
         </div>
       </div>
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white">
+      <header className="glow-bar sticky top-0 z-20 border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-2 sm:py-3">
           <Link href="/" className="shrink-0" aria-label={`${s.businessName} home`}>
             {/* eslint-disable-next-line @next/next/no-img-element -- brand logo served from the main website */}

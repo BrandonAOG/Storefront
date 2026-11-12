@@ -11,6 +11,8 @@ export const BRAND = {
   /** White logo, for dark backgrounds (footer). */
   logoInverse: "https://alwaysongenerators.com/wp-content/uploads/2026/08/nav-logo-inverse.svg",
   icon: "https://alwaysongenerators.com/wp-content/uploads/2026/08/cropped-AlwaysOnGenerators-Favicon-192x192.png",
+  /** The glowing words in the home page hero. */
+  glow: "Always On!",
   tagline: "Southwest Florida's Generator Specialists",
   area: "Naples · Fort Myers · Collier & Lee County",
   mainSite: "https://alwaysongenerators.com",
