@@ -20,7 +20,7 @@ export const AUTOMATIONS: AutomationDef[] = [
   {
     key: "order_confirmation", label: "Booking confirmation", when: "Right after a booking is confirmed", delayLabel: null, marketing: false, delayDays: 0,
     subject: "You're booked for {{day}}",
-    body: "Hi {{name}},\n\nYour booking with {{business}} is confirmed.\n\nWhen: {{day}}, arrival {{window}}\nWhere: {{address}}\nServices: {{items}}\nTotal: {{total}}\n\nView your booking: {{link}}\n\nNeed to change something? Call us at {{phone}}.",
+    body: "Hi {{name}},\n\nYour booking with {{business}} is confirmed.\n\nWhen: {{day}}, arrival {{window}}\nWhere: {{address}}\nServices: {{items}}\nPrice: {{total}}\n\nView your booking: {{link}}\n\nNeed to change something? Call us at {{phone}}.",
     sms: "{{business}}: you're booked for {{day}}, arrival {{window}}. Details: {{link}}",
   },
   {

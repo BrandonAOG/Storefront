@@ -27,9 +27,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="flex-1">
       <header className="border-b border-black bg-ink text-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 text-sm">
+        <div className="mx-auto flex max-w-6xl items-center gap-x-5 overflow-x-auto whitespace-nowrap px-4 py-1 text-sm lg:flex-wrap lg:overflow-visible lg:py-2">
           <span className="font-display font-extrabold text-brand">AOG Admin</span>
-          {nav.map(([href, label]) => <Link key={href} href={href} className="text-slate-300 hover:text-white">{label}</Link>)}
+          {nav.map(([href, label]) => <Link key={href} href={href} className="py-3 text-slate-300 hover:text-white lg:py-1">{label}</Link>)}
           <span className="flex-1" />
           <Link href="/" className="text-slate-300 hover:text-white">View store ↗</Link>
           <form action={logout}><button className="text-slate-300 hover:text-white">Sign out</button></form>

@@ -41,9 +41,9 @@ export function FeedbackForm({ token, reviewUrl }: { token: string; reviewUrl: s
     >
       <h1 className="text-3xl font-bold tracking-tight">How did we do?</h1>
       <p className="mt-2 text-slate-600">How likely are you to recommend us to a friend or neighbor?</p>
-      <div className="mt-5 grid grid-cols-11 gap-1" role="radiogroup" aria-label="Score from 0 to 10">
+      <div className="mt-5 grid grid-cols-6 gap-2 sm:grid-cols-11 sm:gap-1" role="radiogroup" aria-label="Score from 0 to 10">
         {Array.from({ length: 11 }, (_, n) => (
-          <button key={n} type="button" role="radio" aria-checked={score === n} onClick={() => setScore(n)} className={`rounded-lg border py-2 text-sm font-semibold ${score === n ? "border-ink bg-ink text-white" : "border-slate-300 bg-white hover:border-slate-500"}`}>
+          <button key={n} type="button" role="radio" aria-checked={score === n} onClick={() => setScore(n)} className={`min-h-11 rounded-lg border py-2 text-base font-semibold ${score === n ? "border-ink bg-ink text-white" : "border-slate-300 bg-white hover:border-slate-500"}`}>
             {n}
           </button>
         ))}

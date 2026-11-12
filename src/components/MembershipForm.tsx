@@ -34,7 +34,7 @@ export function MembershipForm({ planId, payOnline, cta }: { planId: number; pay
       <SmsConsent checked={smsConsent} onChange={setSmsConsent} />
       <Honeypot value={honeypot} onChange={setHoneypot} />
       <button type="submit" className="btn btn-primary mt-5 w-full py-3 text-base" disabled={pending}>{pending ? "Working…" : cta}</button>
-      <p className="mt-2 text-center text-xs text-slate-500">{payOnline ? "You'll finish on our secure payment page." : "No payment is taken online. We'll contact you to set up billing."}</p>
+      <p className="mt-2 text-center text-xs text-slate-500">{payOnline ? "You'll finish on our secure payment page." : "No payment is taken online. We'll contact you with pricing and next steps."}</p>
     </form>
   );
 }

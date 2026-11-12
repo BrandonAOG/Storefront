@@ -174,7 +174,7 @@ export async function createMembership(input: unknown): Promise<ActionResult> {
     .returning();
   await logEvent(attr, "membership");
 
-  if (!stripeEnabled()) {
+  if (!stripeEnabled() || plan.priceCents <= 0) {
     after(() => membershipChanged(m.id, "membership.created"));
     return { ok: true, url: `/plans/thanks/${token}` };
   }

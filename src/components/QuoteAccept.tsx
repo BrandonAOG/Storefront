@@ -17,13 +17,13 @@ export function QuoteAccept({ token, items, depositPercent, payOnline, canAccept
 
   const row = (i: Item, control?: React.ReactNode) => (
     <li key={i.id} className="flex items-start justify-between gap-3 py-3">
-      <div className="flex items-start gap-3">
+      <label className="flex items-start gap-3">
         {control}
         <div>
           <p className="font-semibold">{i.qty > 1 ? `${i.qty} × ` : ""}{i.name}</p>
           {i.description && <p className="whitespace-pre-line text-sm text-slate-600">{i.description}</p>}
         </div>
-      </div>
+      </label>
       <p className="shrink-0 font-semibold">{money(i.priceCents * i.qty)}</p>
     </li>
   );
@@ -40,7 +40,7 @@ export function QuoteAccept({ token, items, depositPercent, payOnline, canAccept
                 i,
                 <input
                   type="checkbox"
-                  className="mt-1.5"
+                  className="mt-0.5"
                   aria-label={`Include ${i.name}`}
                   disabled={!canAccept}
                   checked={picked.has(i.id)}

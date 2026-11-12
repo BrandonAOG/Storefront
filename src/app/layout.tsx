@@ -1,11 +1,20 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { BRAND } from "@/lib/brand";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: "Always On Generators – Book service online", template: "%s | Always On Generators" },
   icons: { icon: BRAND.icon, apple: BRAND.icon },
+  appleWebApp: { capable: true, title: "Always On", statusBarStyle: "black-translucent" },
+  formatDetection: { telephone: true },
   description: "Upfront pricing and online booking for generator service, maintenance plans and installation consultations.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover", // lets the bottom bar sit above the iPhone home indicator
+  themeColor: "#231f20",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

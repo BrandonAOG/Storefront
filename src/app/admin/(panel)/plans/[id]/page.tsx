@@ -23,7 +23,7 @@ export default async function PlanEdit({ params, searchParams }: { params: Promi
         {p && <input type="hidden" name="id" value={p.id} />}
         <label><span className="label">Name</span><input className="input" name="name" required maxLength={120} defaultValue={p?.name} /></label>
         <label><span className="label">Web address ending (optional)</span><input className="input" name="slug" maxLength={80} defaultValue={p?.slug} placeholder="made from the name" /></label>
-        <label><span className="label">Price in dollars</span><input className="input" name="price" inputMode="decimal" required defaultValue={p ? (p.priceCents / 100).toFixed(2) : ""} /></label>
+        <label><span className="label">Price in dollars (0 = “Call for pricing”)</span><input className="input" name="price" inputMode="decimal" defaultValue={p ? (p.priceCents / 100).toFixed(2) : ""} /></label>
         <label><span className="label">Billed every</span>
           <select className="input" name="interval" defaultValue={p?.interval ?? "year"}><option value="year">Year</option><option value="month">Month</option></select>
         </label>

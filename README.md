@@ -56,8 +56,26 @@ npm run dev                 # http://localhost:3000
 
 Admin sign-in is at `/admin`, using `ADMIN_PASSWORD` from `.env`.
 
-**The seeded prices, descriptions and plan features are placeholders.** Replace
-them in the admin area before customers see the site.
+The starter services, plans, phone number and headline are written from
+alwaysongenerators.com (see `scripts/content.ts`). **No prices are set**, because
+the website doesn't publish any:
+
+- A bookable service with price 0 shows "Price confirmed before work begins".
+- A "free estimate" service leads to the virtual visit form.
+- A plan with price 0 shows "Call for pricing" and takes a request, not a payment.
+
+Add real prices in the admin area whenever you want them shown.
+
+If your database still has the first version's made-up content, run
+`npm run db:site-content` once. It removes only those original placeholders and
+adds the website's content; anything you created yourself is kept.
+
+## Phones and tablets
+
+Built mobile-first and tested on iPhone SE, iPhone 13, iPad Mini and iPad Pro
+sizes: no sideways scrolling, 44 px touch targets, 16 px form fields (so iPhones
+don't zoom when a field is tapped), tap-to-call, and a bottom bar on phones with
+Call and Book buttons. Customers can also add the site to their home screen.
 
 ## Settings in `.env`
 

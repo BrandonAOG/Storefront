@@ -31,10 +31,10 @@ export const orderConfirmed = (orderId: string) =>
     if (customer) {
       await sendAutomation({
         key: "order_confirmation", refId: o.id, customer, settings,
-        vars: { day: fmtDay(o.day, true), window: fmtWindow(o.startMin, o.endMin), address: `${o.address}, ${o.city} ${o.zip}`, items: itemText, total: money(o.subtotalCents), link: `${appUrl()}/order/${o.token}` },
+        vars: { day: fmtDay(o.day, true), window: fmtWindow(o.startMin, o.endMin), address: `${o.address}, ${o.city} ${o.zip}`, items: itemText, total: o.subtotalCents > 0 ? money(o.subtotalCents) : "confirmed with you before work begins", link: `${appUrl()}/order/${o.token}` },
       });
     }
-    await alertOwner(settings, `order:${o.id}`, `New booking: ${fmtDay(o.day)} ${fmtWindow(o.startMin, o.endMin)}`, `${o.name} booked ${itemText} (${money(o.subtotalCents)}).\n\n${appUrl()}/admin/orders/${o.id}`);
+    await alertOwner(settings, `order:${o.id}`, `New booking: ${fmtDay(o.day)} ${fmtWindow(o.startMin, o.endMin)}`, `${o.name} booked ${itemText}${o.subtotalCents > 0 ? ` (${money(o.subtotalCents)})` : ""}.\n\n${appUrl()}/admin/orders/${o.id}`);
     await emit("order.confirmed", orderOut(o, items));
   });
 
@@ -61,7 +61,7 @@ export const membershipChanged = (id: string, event: "membership.created" | "mem
     const [settings, customer] = await Promise.all([getSettings(), customerById(m.customerId)]);
     if (event !== "membership.cancelled") {
       if (customer) await sendAutomation({ key: "membership_welcome", refId: m.id, customer, settings, vars: { plan: m.planName, link: `${appUrl()}/plans/thanks/${m.token}` } });
-      await alertOwner(settings, `membership:${m.id}`, `New plan sign-up: ${m.planName}`, `${m.name} signed up for ${m.planName} (${money(m.priceCents)} / ${m.interval}).\n\n${appUrl()}/admin/memberships`);
+      await alertOwner(settings, `membership:${m.id}`, `New plan sign-up: ${m.planName}`, `${m.name} asked for the ${m.planName} plan${m.priceCents > 0 ? ` (${money(m.priceCents)} / ${m.interval})` : ""}.\n\n${appUrl()}/admin/memberships`);
     }
     await emit(event, membershipOut(m));
   });

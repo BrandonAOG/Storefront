@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { AddToCart } from "@/components/Cart";
-import { money } from "@/lib/format";
+import { money, NO_PRICE } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -32,18 +32,17 @@ export default async function ServicePage({ params }: { params: Promise<{ slug: 
         {s.priceType === "fixed" ? (
           <>
             <div>
-              <p className="text-3xl font-bold">{money(s.priceCents)}</p>
-              <p className="text-sm text-slate-500">Upfront price</p>
+              {s.priceCents > 0 ? <><p className="text-3xl font-bold">{money(s.priceCents)}</p><p className="text-sm text-slate-500">Upfront price</p></> : <><p className="text-xl font-bold">Book a visit online</p><p className="text-sm text-slate-500">{NO_PRICE}</p></>}
             </div>
             <AddToCart serviceId={s.id} className="px-6 py-3 text-base" />
           </>
         ) : (
           <>
             <div>
-              <p className="text-xl font-bold">Custom quote</p>
-              <p className="text-sm text-slate-500">Priced after a short virtual visit</p>
+              <p className="text-xl font-bold">Free estimate</p>
+              <p className="text-sm text-slate-500">A clear, flat quote after a short visit</p>
             </div>
-            <Link href={`/virtual-visit?topic=${encodeURIComponent(s.name)}`} className="btn btn-dark px-6 py-3 text-base">Request a virtual visit</Link>
+            <Link href={`/virtual-visit?topic=${encodeURIComponent(s.name)}`} className="btn btn-dark px-6 py-3 text-base">Get a free estimate</Link>
           </>
         )}
       </div>

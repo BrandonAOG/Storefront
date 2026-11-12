@@ -26,11 +26,11 @@ export default async function ServiceEdit({ params, searchParams }: { params: Pr
         <label><span className="label">Web address ending (optional)</span><input className="input" name="slug" maxLength={80} defaultValue={s?.slug} placeholder="made from the name" /></label>
         <label><span className="label">Pricing</span>
           <select className="input" name="priceType" defaultValue={s?.priceType ?? "fixed"}>
-            <option value="fixed">Fixed price, bookable online</option>
-            <option value="quote">Custom quote, starts with a virtual visit</option>
+            <option value="fixed">Bookable online</option>
+            <option value="quote">Free estimate, starts with a virtual visit</option>
           </select>
         </label>
-        <label><span className="label">Price in dollars (fixed price only)</span><input className="input" name="price" inputMode="decimal" defaultValue={s ? (s.priceCents / 100).toFixed(2) : ""} /></label>
+        <label><span className="label">Price in dollars (0 = confirmed before work begins)</span><input className="input" name="price" inputMode="decimal" defaultValue={s ? (s.priceCents / 100).toFixed(2) : ""} /></label>
         <label className="sm:col-span-2"><span className="label">Short summary (shown on the card)</span><input className="input" name="summary" maxLength={300} defaultValue={s?.summary} /></label>
         <label className="sm:col-span-2"><span className="label">Full description</span><textarea className="input" name="description" rows={6} maxLength={5000} defaultValue={s?.description} /></label>
         <label className="sm:col-span-2"><span className="label">What&apos;s included (one per line, shown as a checklist)</span><textarea className="input" name="includes" rows={4} maxLength={2000} defaultValue={s?.includes} /></label>

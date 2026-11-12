@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createOrder } from "@/app/actions";
-import { fmtDay, fmtWindow, money } from "@/lib/format";
+import { fmtDay, fmtWindow, money, NO_PRICE } from "@/lib/format";
 import { useCart } from "./Cart";
 import { ContactFields, emptyContact, Field, Honeypot, SmsConsent, type Contact } from "./ContactFields";
 import { track } from "./Tracker";
@@ -31,6 +31,10 @@ export function BookingWizard({ services, serviceZips, depositPercent, payOnline
   const lines = cart.lines.filter((l) => byId.has(l.serviceId)).map((l) => ({ ...l, service: byId.get(l.serviceId)! }));
   const subtotal = lines.reduce((sum, l) => sum + l.service.priceCents * l.qty, 0);
   const dueNow = payOnline ? Math.round((subtotal * depositPercent) / 100) : 0;
+  const pays = payOnline && dueNow > 0;
+  // Services without a listed price are quoted by the technician before work starts.
+  const unpriced = lines.some((l) => l.service.priceCents === 0);
+  const price = (cents: number) => (cents > 0 ? money(cents) : "Quoted on site");
 
   // Count "started checkout" once per page load, when there is something to book.
   const started = useRef(false);
@@ -52,6 +56,10 @@ export function BookingWizard({ services, serviceZips, depositPercent, payOnline
       })
       .catch(() => setDays([]));
   };
+  useEffect(() => {
+    if (step > 0) window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [step]);
+
   const goToSlots = () => {
     setStep(2);
     loadSlots();
@@ -122,18 +130,18 @@ export function BookingWizard({ services, serviceZips, depositPercent, payOnline
                 <li key={l.serviceId} className="flex flex-wrap items-center justify-between gap-3 py-3">
                   <div>
                     <p className="font-semibold">{l.service.name}</p>
-                    <p className="text-sm text-slate-500">{money(l.service.priceCents)} each</p>
+                    <p className="text-sm text-slate-500">{l.service.priceCents > 0 ? `${money(l.service.priceCents)} each` : NO_PRICE}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button type="button" className="btn btn-ghost px-3 py-1" aria-label={`Remove one ${l.service.name}`} onClick={() => cart.setQty(l.serviceId, l.qty - 1)}>−</button>
+                    <button type="button" className="btn btn-ghost min-w-11 px-3" aria-label={`Remove one ${l.service.name}`} onClick={() => cart.setQty(l.serviceId, l.qty - 1)}>−</button>
                     <span className="w-6 text-center font-semibold">{l.qty}</span>
-                    <button type="button" className="btn btn-ghost px-3 py-1" aria-label={`Add one ${l.service.name}`} onClick={() => cart.setQty(l.serviceId, l.qty + 1)}>+</button>
-                    <span className="w-20 text-right font-semibold">{money(l.service.priceCents * l.qty)}</span>
+                    <button type="button" className="btn btn-ghost min-w-11 px-3" aria-label={`Add one ${l.service.name}`} onClick={() => cart.setQty(l.serviceId, l.qty + 1)}>+</button>
+                    {l.service.priceCents > 0 && <span className="w-20 text-right font-semibold">{money(l.service.priceCents * l.qty)}</span>}
                   </div>
                 </li>
               ))}
             </ul>
-            <div className="mt-4 flex justify-between gap-3">
+            <div className="mt-4 flex flex-wrap justify-between gap-3">
               <Link href="/#services" className="btn btn-ghost">Add another service</Link>
               <button type="button" className="btn btn-primary" onClick={() => setStep(1)}>Continue</button>
             </div>
@@ -183,7 +191,7 @@ export function BookingWizard({ services, serviceZips, depositPercent, payOnline
                         type="button"
                         disabled={!open}
                         onClick={() => { setDay(d.day); setStartMin(null); }}
-                        className={`shrink-0 rounded-xl border px-3 py-2 text-sm font-semibold ${d.day === day ? "border-ink bg-ink text-white" : open ? "border-slate-300 bg-white hover:border-slate-500" : "border-slate-200 bg-slate-100 text-slate-400 line-through"}`}
+                        className={`min-h-11 shrink-0 rounded-xl border px-3 py-2 text-sm font-semibold ${d.day === day ? "border-ink bg-ink text-white" : open ? "border-slate-300 bg-white hover:border-slate-500" : "border-slate-200 bg-slate-100 text-slate-400 line-through"}`}
                       >
                         {fmtDay(d.day)}
                       </button>
@@ -197,7 +205,7 @@ export function BookingWizard({ services, serviceZips, depositPercent, payOnline
                       type="button"
                       disabled={!s.available}
                       onClick={() => setStartMin(s.startMin)}
-                      className={`rounded-xl border px-4 py-3 text-left text-sm font-semibold ${s.startMin === startMin ? "border-ink bg-cream ring-2 ring-brand" : s.available ? "border-slate-300 bg-white hover:border-slate-500" : "border-slate-200 bg-slate-100 text-slate-400"}`}
+                      className={`min-h-12 rounded-xl border px-4 py-3 text-left text-base font-semibold sm:text-sm ${s.startMin === startMin ? "border-ink bg-cream ring-2 ring-brand" : s.available ? "border-slate-300 bg-white hover:border-slate-500" : "border-slate-200 bg-slate-100 text-slate-400"}`}
                     >
                       {fmtWindow(s.startMin, s.endMin)}
                       {!s.available && <span className="ml-2 font-normal">Full</span>}
@@ -223,16 +231,18 @@ export function BookingWizard({ services, serviceZips, depositPercent, payOnline
               {notes && <div><dt className="font-semibold text-slate-500">Notes</dt><dd className="whitespace-pre-line">{notes}</dd></div>}
             </dl>
             <p className="mt-5 text-sm text-slate-600">
-              {payOnline
+              {pays
                 ? depositPercent < 100
                   ? `You'll pay a ${depositPercent}% deposit (${money(dueNow)}) now on our secure payment page. The balance is due when the work is done.`
                   : `You'll pay ${money(dueNow)} now on our secure payment page.`
-                : "No payment is taken online. You'll pay when the work is done."}
+                : unpriced
+                  ? "No payment is taken online. We'll confirm the price with you before any work begins."
+                  : "No payment is taken online. You'll pay when the work is done."}
             </p>
             <div className="mt-5 flex justify-between gap-3">
               <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => setStep(2)}>Back</button>
               <button type="button" className="btn btn-primary px-6" disabled={pending} onClick={submit}>
-                {pending ? "Working…" : payOnline ? `Pay ${money(dueNow)} & book` : "Confirm booking"}
+                {pending ? "Working…" : pays ? `Pay ${money(dueNow)} & book` : "Confirm booking"}
               </button>
             </div>
           </div>
@@ -245,12 +255,13 @@ export function BookingWizard({ services, serviceZips, depositPercent, payOnline
           {lines.map((l) => (
             <li key={l.serviceId} className="flex justify-between gap-3">
               <span>{l.qty} × {l.service.name}</span>
-              <span className="font-semibold">{money(l.service.priceCents * l.qty)}</span>
+              <span className="shrink-0 font-semibold">{price(l.service.priceCents * l.qty)}</span>
             </li>
           ))}
         </ul>
-        <div className="mt-3 flex justify-between border-t border-slate-200 pt-3 font-bold"><span>Total</span><span>{money(subtotal)}</span></div>
-        {payOnline && depositPercent < 100 && <div className="mt-1 flex justify-between text-sm text-slate-600"><span>Due today</span><span>{money(dueNow)}</span></div>}
+        {subtotal > 0 && <div className="mt-3 flex justify-between border-t border-slate-200 pt-3 font-bold"><span>{unpriced ? "Listed prices" : "Total"}</span><span>{money(subtotal)}</span></div>}
+        {unpriced && <p className="mt-3 border-t border-slate-200 pt-3 text-sm text-slate-600">{NO_PRICE}.</p>}
+        {pays && depositPercent < 100 && <div className="mt-1 flex justify-between text-sm text-slate-600"><span>Due today</span><span>{money(dueNow)}</span></div>}
         {slot && <p className="mt-3 rounded-lg bg-slate-100 p-3 text-sm"><strong>{fmtDay(day)}</strong><br />{fmtWindow(slot.startMin, slot.endMin)}</p>}
       </aside>
     </div>

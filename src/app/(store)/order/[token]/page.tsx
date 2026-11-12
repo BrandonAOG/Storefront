@@ -43,11 +43,12 @@ export default async function OrderPage({ params }: { params: Promise<{ token: s
 
         <ul className="mt-6 divide-y divide-slate-100 border-y border-slate-200 text-sm">
           {items.map((i) => (
-            <li key={i.id} className="flex justify-between py-2"><span>{i.qty} × {i.name}</span><span className="font-semibold">{money(i.priceCents * i.qty)}</span></li>
+            <li key={i.id} className="flex justify-between py-2"><span>{i.qty} × {i.name}</span><span className="shrink-0 font-semibold">{i.priceCents > 0 ? money(i.priceCents * i.qty) : "Quoted on site"}</span></li>
           ))}
         </ul>
         <div className="mt-3 space-y-1 text-sm">
-          <p className="flex justify-between font-bold"><span>Total</span><span>{money(order.subtotalCents)}</span></p>
+          {order.subtotalCents > 0 && <p className="flex justify-between font-bold"><span>{items.some((i) => i.priceCents === 0) ? "Listed prices" : "Total"}</span><span>{money(order.subtotalCents)}</span></p>}
+          {items.some((i) => i.priceCents === 0) && <p className="text-slate-600">We&apos;ll confirm the price with you before any work begins.</p>}
           {order.paymentStatus === "paid" && <p className="flex justify-between text-green-700"><span>Paid online</span><span>{money(order.dueNowCents)}</span></p>}
           {order.status !== "cancelled" && balance > 0 && <p className="flex justify-between text-slate-600"><span>Due at service</span><span>{money(balance)}</span></p>}
         </div>

@@ -24,7 +24,7 @@ export default async function PlansAdmin() {
               <tr key={p.id}>
                 <td>{p.sortOrder}</td>
                 <td><Link className="font-semibold underline" href={`/admin/plans/${p.id}`}>{p.name}</Link></td>
-                <td>{money(p.priceCents)} / {p.interval}</td>
+                <td>{p.priceCents > 0 ? `${money(p.priceCents)} / ${p.interval}` : "Call for pricing"}</td>
                 <td>{p.active ? "Yes" : "Hidden"}</td>
               </tr>
             ))}

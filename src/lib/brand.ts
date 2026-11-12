@@ -14,4 +14,7 @@ export const BRAND = {
   tagline: "Southwest Florida's Generator Specialists",
   area: "Naples · Fort Myers · Collier & Lee County",
   mainSite: "https://alwaysongenerators.com",
+  financing: "https://alwaysongenerators.com/financing/",
+  badges: ["Generac Prestige Dealer", "Authorized Kohler Titanium Dealer", "24/7 emergency service"],
+  cities: ["Naples", "Fort Myers", "Cape Coral", "Bonita Springs", "Estero", "Marco Island", "Fort Myers Beach", "Captiva", "Punta Gorda", "Port Charlotte", "Sarasota"],
 };

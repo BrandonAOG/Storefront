@@ -25,7 +25,7 @@ export default async function ServicesAdmin() {
                 <td>{s.sortOrder}</td>
                 <td><Link className="font-semibold underline" href={`/admin/services/${s.id}`}>{s.name}</Link></td>
                 <td>{s.category}</td>
-                <td>{s.priceType === "fixed" ? money(s.priceCents) : "Quote"}</td>
+                <td>{s.priceType !== "fixed" ? "Free estimate" : s.priceCents > 0 ? money(s.priceCents) : "No price set"}</td>
                 <td>{s.active ? "Yes" : "Hidden"}</td>
               </tr>
             ))}

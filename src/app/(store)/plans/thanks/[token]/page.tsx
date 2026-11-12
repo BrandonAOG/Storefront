@@ -28,7 +28,7 @@ export default async function PlanThanks({ params }: { params: Promise<{ token: 
               ? "This plan is no longer active."
               : `Thanks, ${m.name.split(" ")[0]}. We have your request for the ${m.planName} plan and will contact you to finish setup.`}
         </p>
-        <p className="mt-4 text-sm"><strong>{m.planName}</strong> – {money(m.priceCents)} / {m.interval}</p>
+        <p className="mt-4 text-sm"><strong>{m.planName}</strong>{m.priceCents > 0 && ` – ${money(m.priceCents)} / ${m.interval}`}</p>
         <div className="mt-6 flex flex-wrap gap-3">
           {m.status === "active" && m.stripeCustomerId && <ManageBilling token={token} />}
           <Link href="/" className="btn btn-ghost">Back to home</Link>

@@ -12,7 +12,9 @@ export default async function PlanPage({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const [p] = await db().select().from(schema.plans).where(and(eq(schema.plans.slug, slug), eq(schema.plans.active, true)));
   if (!p) notFound();
-  const price = `${money(p.priceCents)} / ${p.interval}`;
+  const priced = p.priceCents > 0;
+  const price = priced ? `${money(p.priceCents)} / ${p.interval}` : "Call for pricing";
+  const payOnline = stripeEnabled() && priced;
   return (
     <div className="mx-auto max-w-5xl px-4 py-12">
       <Link href="/plans" className="text-sm text-slate-500 hover:underline">← All plans</Link>
@@ -27,7 +29,7 @@ export default async function PlanPage({ params }: { params: Promise<{ slug: str
             ))}
           </ul>
         </div>
-        <MembershipForm planId={p.id} payOnline={stripeEnabled()} cta={stripeEnabled() ? `Subscribe – ${price}` : "Request this plan"} />
+        <MembershipForm planId={p.id} payOnline={payOnline} cta={payOnline ? `Subscribe – ${price}` : "Request this plan"} />
       </div>
     </div>
   );

@@ -3,18 +3,21 @@ import { asc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import type { Service } from "@/db/schema";
 import { AddToCart } from "@/components/Cart";
-import { money } from "@/lib/format";
+import { BRAND } from "@/lib/brand";
+import { money, NO_PRICE } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 import { getAttribution } from "@/lib/visitor";
 
 export const dynamic = "force-dynamic";
 
 const faqs = [
-  ["Is the price I see the price I pay?", "Yes. Fixed-price services are charged exactly as listed. If the technician finds additional work is needed, you approve it before anything is done."],
-  ["Do I have to call to book?", "No. Pick your services, choose an arrival window and check out. You'll get a confirmation page with your booking details right away."],
-  ["What if I'm outside your service area?", "Enter your ZIP code at checkout. If we can't reach you yet, we'll tell you before you pay."],
-  ["What is a virtual visit?", "A short video or phone consultation. For installations and larger jobs we look at your site remotely, answer questions and prepare a quote without sending a truck first."],
-  ["How do maintenance plans work?", "A plan covers scheduled maintenance for your generator at a set price, billed monthly or yearly. You can cancel any time."],
+  ["How does pricing work?", "Maintenance and repair visits are booked online, and we confirm the price with you before any work begins. Installations and electrical projects start with a free estimate and a clear, flat quote."],
+  ["Do I have to call to book?", "No. Choose your service, pick an arrival window and confirm. You'll get a confirmation page with your booking details right away."],
+  ["What if it's an emergency?", "Don't wait for an online booking. Call our 24/7 emergency line for immediate dispatch."],
+  ["Which brands do you service?", "Generac, Kohler, Cummins and other major generator brands, whether or not we installed the unit."],
+  ["What is a virtual visit?", "A short video or phone consultation. We look at your electrical panel and where the generator would sit, then prepare your estimate without a site trip first."],
+  ["Do you offer financing?", "Yes. Generator financing is available through the Synchrony Project Card. Checking whether you prequalify does not affect your credit score."],
+  ["How do maintenance plans work?", "Choose Standard, Deluxe or Always On. Every plan includes scheduled maintenance and electronic monitoring between visits, and higher levels add more frequent wellness visits."],
 ];
 
 function ServiceCard({ s }: { s: Service }) {
@@ -26,16 +29,16 @@ function ServiceCard({ s }: { s: Service }) {
         <Link href={`/services/${s.slug}`} className="hover:underline">{s.name}</Link>
       </h3>
       <p className="mt-1 flex-1 text-sm text-slate-600">{s.summary}</p>
-      <div className="mt-4 flex items-center justify-between gap-3">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         {s.priceType === "fixed" ? (
           <>
-            <p className="text-2xl font-bold">{money(s.priceCents)}</p>
+            {s.priceCents > 0 ? <p className="text-2xl font-bold">{money(s.priceCents)}</p> : <p className="text-sm font-semibold text-slate-500">{NO_PRICE}</p>}
             <AddToCart serviceId={s.id} />
           </>
         ) : (
           <>
-            <p className="text-sm font-semibold text-slate-500">Custom quote</p>
-            <Link href={`/virtual-visit?topic=${encodeURIComponent(s.name)}`} className="btn btn-dark">Get a quote</Link>
+            <p className="text-sm font-semibold text-slate-500">Free estimate</p>
+            <Link href={`/virtual-visit?topic=${encodeURIComponent(s.name)}`} className="btn btn-dark">Free estimate</Link>
           </>
         )}
       </div>
@@ -62,18 +65,21 @@ export default async function Home() {
           <h1 className="mt-3 max-w-3xl text-4xl font-extrabold tracking-tight md:text-6xl">{headline}</h1>
           <p className="mt-5 max-w-2xl text-lg text-slate-300">{sub}</p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="#services" className="btn btn-primary px-6 py-3 text-base">See services &amp; prices</Link>
-            <Link href="/virtual-visit" className="btn bg-cream px-6 py-3 text-base text-black hover:bg-white">Book a virtual visit</Link>
+            <Link href="#services" className="btn btn-primary px-6 py-3 text-base">Book service</Link>
+            <Link href="/virtual-visit" className="btn bg-cream px-6 py-3 text-base text-black hover:bg-white">Free estimate</Link>
           </div>
+          <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm font-semibold text-cream">
+            {BRAND.badges.map((b) => <li key={b} className="flex items-center gap-2"><span className="text-brand" aria-hidden>✓</span>{b}</li>)}
+          </ul>
         </div>
       </section>
 
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto grid max-w-6xl gap-6 px-4 py-10 md:grid-cols-3">
           {[
-            ["1. Choose", "Pick the service you need. Every fixed-price job shows its price."],
+            ["1. Choose", "Pick maintenance or repair to book a visit, or ask for a free estimate on a new project."],
             ["2. Schedule", "Choose an arrival window that works for you from our live calendar."],
-            ["3. Check out", "Confirm your details and pay securely. You're booked."],
+            ["3. Confirm", "Add your details and you're booked. We confirm pricing before any work begins."],
           ].map(([t, d]) => (
             <div key={t}>
               <h2 className="font-semibold">{t}</h2>
@@ -84,7 +90,7 @@ export default async function Home() {
       </section>
 
       <section id="services" className="mx-auto max-w-6xl scroll-mt-28 px-4 py-14">
-        <h2 className="text-3xl font-bold tracking-tight">Services &amp; pricing</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Our services</h2>
         {services.length === 0 && <p className="mt-4 text-slate-600">Services are being set up. Please check back soon.</p>}
         {categories.map((cat) => (
           <div key={cat} className="mt-8">
@@ -102,7 +108,7 @@ export default async function Home() {
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h2 className="text-3xl font-bold tracking-tight">Maintenance plans</h2>
-                <p className="mt-2 text-slate-600">Keep your generator ready for the next outage with scheduled service at a set price.</p>
+                <p className="mt-2 text-slate-600">Every plan includes scheduled maintenance and electronic monitoring between visits.</p>
               </div>
               <Link href="/plans" className="btn btn-ghost">Compare plans</Link>
             </div>
@@ -111,7 +117,7 @@ export default async function Home() {
                 <Link key={p.id} href={`/plans/${p.slug}`} className="card transition hover:border-ink">
                   <h3 className="font-semibold">{p.name}</h3>
                   <p className="mt-1 text-sm text-slate-600">{p.summary}</p>
-                  <p className="mt-3 text-2xl font-bold">{money(p.priceCents)}<span className="text-sm font-medium text-slate-500"> / {p.interval}</span></p>
+                  <p className="mt-3 text-2xl font-bold">{p.priceCents > 0 ? <>{money(p.priceCents)}<span className="text-sm font-medium text-slate-500"> / {p.interval}</span></> : <span className="text-base">Call for pricing</span>}</p>
                 </Link>
               ))}
             </div>
@@ -127,7 +133,17 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-3xl px-4 pb-20">
+      <section className="bg-white">
+        <div className="mx-auto max-w-6xl px-4 py-12">
+          <h2 className="text-2xl font-bold tracking-tight">Serving Southwest Florida</h2>
+          <ul className="mt-4 flex flex-wrap gap-2 text-sm">
+            {BRAND.cities.map((c) => <li key={c} className="rounded-full bg-cream px-3 py-1 font-semibold">{c}</li>)}
+          </ul>
+          <p className="mt-4 text-sm text-slate-600">Thinking about the cost of a new generator? <a className="font-semibold underline" href={BRAND.financing}>See financing options</a>.</p>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-3xl px-4 py-14 pb-20">
         <h2 className="text-3xl font-bold tracking-tight">Common questions</h2>
         <div className="mt-6 divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white">
           {faqs.map(([q, a]) => (

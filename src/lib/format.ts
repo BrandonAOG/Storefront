@@ -11,6 +11,9 @@ export function money(cents: number): string {
   });
 }
 
+/** Shown wherever a service has no listed price. */
+export const NO_PRICE = "Price confirmed before work begins";
+
 export function fmtTime(min: number): string {
   const h = Math.floor(min / 60);
   const m = min % 60;
