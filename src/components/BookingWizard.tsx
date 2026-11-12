@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createOrder } from "@/app/actions";
 import { fmtDay, fmtWindow, money } from "@/lib/format";
 import { useCart } from "./Cart";
-import { ContactFields, emptyContact, Field, Honeypot, type Contact } from "./ContactFields";
+import { ContactFields, emptyContact, Field, Honeypot, SmsConsent, type Contact } from "./ContactFields";
+import { track } from "./Tracker";
 
-type ServiceLite = { id: number; name: string; summary: string; priceCents: number };
+type ServiceLite = { id: number; name: string; summary: string; priceCents: number; zips: string[] };
 type DaySlots = { day: string; slots: { startMin: number; endMin: number; available: boolean }[] };
 type Props = { services: ServiceLite[]; serviceZips: string[]; depositPercent: number; payOnline: boolean };
 
@@ -18,6 +19,7 @@ export function BookingWizard({ services, serviceZips, depositPercent, payOnline
   const [step, setStep] = useState(0);
   const [contact, setContact] = useState<Contact>(emptyContact);
   const [notes, setNotes] = useState("");
+  const [smsConsent, setSmsConsent] = useState(false);
   const [honeypot, setHoneypot] = useState("");
   const [days, setDays] = useState<DaySlots[] | null>(null);
   const [day, setDay] = useState("");
@@ -30,9 +32,19 @@ export function BookingWizard({ services, serviceZips, depositPercent, payOnline
   const subtotal = lines.reduce((sum, l) => sum + l.service.priceCents * l.qty, 0);
   const dueNow = payOnline ? Math.round((subtotal * depositPercent) / 100) : 0;
 
+  // Count "started checkout" once per page load, when there is something to book.
+  const started = useRef(false);
+  const hasLines = cart.ready && lines.length > 0;
+  useEffect(() => {
+    if (hasLines && !started.current) {
+      started.current = true;
+      track("checkout_start");
+    }
+  }, [hasLines]);
+
   const loadSlots = () => {
     setDays(null);
-    fetch("/api/slots")
+    fetch(`/api/slots?services=${lines.map((l) => l.serviceId).join(",")}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d: { days: DaySlots[] }) => {
         setDays(d.days);
@@ -58,7 +70,9 @@ export function BookingWizard({ services, serviceZips, depositPercent, payOnline
   }
 
   const zip5 = contact.zip.trim().slice(0, 5);
-  const zipBlocked = serviceZips.length > 0 && /^\d{5}$/.test(zip5) && !serviceZips.includes(zip5);
+  const zipOk = /^\d{5}$/.test(zip5);
+  const zipBlocked = serviceZips.length > 0 && zipOk && !serviceZips.includes(zip5);
+  const limited = zipOk ? lines.find((l) => l.service.zips.length > 0 && !l.service.zips.includes(zip5)) : undefined;
   const slot = days?.find((d) => d.day === day)?.slots.find((s) => s.startMin === startMin);
 
   const submit = () => {
@@ -67,6 +81,7 @@ export function BookingWizard({ services, serviceZips, depositPercent, payOnline
     startTransition(async () => {
       const res = await createOrder({
         ...contact,
+        smsConsent,
         notes,
         day,
         startMin,
@@ -130,19 +145,21 @@ export function BookingWizard({ services, serviceZips, depositPercent, payOnline
             className="card"
             onSubmit={(e) => {
               e.preventDefault();
-              if (!zipBlocked) goToSlots();
+              if (!zipBlocked && !limited) goToSlots();
             }}
           >
             <h2 className="text-xl font-bold">Your details</h2>
             <div className="mt-4"><ContactFields value={contact} onChange={setContact} /></div>
             {zipBlocked && <p role="alert" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Sorry, ZIP code {zip5} is outside our online booking area. Please call us and we&apos;ll see what we can do.</p>}
+            {!zipBlocked && limited && <p role="alert" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Sorry, &quot;{limited.service.name}&quot; isn&apos;t offered in ZIP code {zip5}. Go back and remove it, or call us.</p>}
+            <SmsConsent checked={smsConsent} onChange={setSmsConsent} />
             <Field label="Anything we should know? (optional)" className="mt-4">
               <textarea className="input" rows={3} maxLength={1000} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Generator brand and model, gate code, pets…" />
             </Field>
             <Honeypot value={honeypot} onChange={setHoneypot} />
             <div className="mt-4 flex justify-between gap-3">
               <button type="button" className="btn btn-ghost" onClick={() => setStep(0)}>Back</button>
-              <button type="submit" className="btn btn-primary" disabled={zipBlocked}>Continue</button>
+              <button type="submit" className="btn btn-primary" disabled={zipBlocked || Boolean(limited)}>Continue</button>
             </div>
           </form>
         )}

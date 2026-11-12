@@ -4,6 +4,8 @@ import { db, schema } from "@/db";
 import type { Service } from "@/db/schema";
 import { AddToCart } from "@/components/Cart";
 import { money } from "@/lib/format";
+import { getSettings } from "@/lib/settings";
+import { getAttribution } from "@/lib/visitor";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +19,9 @@ const faqs = [
 
 function ServiceCard({ s }: { s: Service }) {
   return (
-    <div className="card flex flex-col">
+    <div className="card flex flex-col overflow-hidden">
+      {/* eslint-disable-next-line @next/next/no-img-element -- admin-supplied image address */}
+      {s.imageUrl && <img src={s.imageUrl} alt="" loading="lazy" className="-mx-5 -mt-5 mb-4 h-40 w-[calc(100%+2.5rem)] max-w-none object-cover" />}
       <h3 className="text-lg font-semibold">
         <Link href={`/services/${s.slug}`} className="hover:underline">{s.name}</Link>
       </h3>
@@ -40,6 +44,10 @@ function ServiceCard({ s }: { s: Service }) {
 }
 
 export default async function Home() {
+  const settings = await getSettings();
+  const { variant } = await getAttribution(settings);
+  const headline = variant === "B" ? settings.heroHeadlineB : settings.heroHeadline;
+  const sub = variant === "B" ? settings.heroSubB || settings.heroSub : settings.heroSub;
   const [services, plans] = await Promise.all([
     db().select().from(schema.services).where(eq(schema.services.active, true)).orderBy(asc(schema.services.sortOrder), asc(schema.services.name)),
     db().select().from(schema.plans).where(eq(schema.plans.active, true)).orderBy(asc(schema.plans.sortOrder)),
@@ -51,8 +59,8 @@ export default async function Home() {
       <section className="bg-slate-950 text-white">
         <div className="mx-auto max-w-6xl px-4 py-16 md:py-24">
           <p className="text-sm font-semibold uppercase tracking-widest text-brand">Open 24/7 online</p>
-          <h1 className="mt-3 max-w-3xl text-4xl font-bold tracking-tight md:text-6xl">Generator service, priced upfront. Book it in two minutes.</h1>
-          <p className="mt-5 max-w-2xl text-lg text-slate-300">See the price, pick an arrival window and check out. No phone tag, no waiting for a callback.</p>
+          <h1 className="mt-3 max-w-3xl text-4xl font-bold tracking-tight md:text-6xl">{headline}</h1>
+          <p className="mt-5 max-w-2xl text-lg text-slate-300">{sub}</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="#services" className="btn btn-primary px-6 py-3 text-base">See services &amp; prices</Link>
             <Link href="/virtual-visit" className="btn border border-slate-600 px-6 py-3 text-base text-white hover:bg-slate-800">Book a virtual visit</Link>

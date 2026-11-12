@@ -1,0 +1,49 @@
+import { notFound } from "next/navigation";
+import { asc, eq } from "drizzle-orm";
+import { db, schema } from "@/db";
+import { MediaUploader } from "@/components/MediaUploader";
+import { getSettings } from "@/lib/settings";
+
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Your virtual visit", robots: { index: false } };
+
+export default async function VisitStatus({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  if (!/^[a-f0-9]{48}$/.test(token)) notFound();
+  const [v] = await db().select().from(schema.visits).where(eq(schema.visits.token, token));
+  if (!v) notFound();
+  const [media, s] = await Promise.all([
+    db().select().from(schema.visitMedia).where(eq(schema.visitMedia.visitId, v.id)).orderBy(asc(schema.visitMedia.createdAt)),
+    getSettings(),
+  ]);
+  const uploads = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  const open = v.status === "new" || v.status === "scheduled";
+  return (
+    <div className="mx-auto max-w-2xl px-4 py-12">
+      <div className="card">
+        <h1 className="text-3xl font-bold tracking-tight">{v.status === "done" || v.status === "closed" ? "Virtual visit complete" : "Request received"}</h1>
+        <p className="mt-2 text-slate-600">
+          {v.mode === "async"
+            ? `Thanks, ${v.name.split(" ")[0]}. Add a short video or a few photos below and we'll review them and send your estimate.`
+            : `Thanks, ${v.name.split(" ")[0]}. We'll contact you to confirm a time. Save this page: your meeting link will appear here.`}
+        </p>
+        {/^https:\/\//i.test(v.meetingUrl) && open && (
+          <a href={v.meetingUrl} target="_blank" rel="noopener noreferrer" className="btn btn-dark mt-5">Join your virtual visit ↗</a>
+        )}
+        {uploads && (
+          <div className="mt-8 border-t border-slate-200 pt-6">
+            <h2 className="text-lg font-bold">Photos and video of your site</h2>
+            <p className="mt-1 text-sm text-slate-600">Most helpful: your electrical panel with the cover open, your gas or propane meter, and where you&apos;d like the generator to sit.</p>
+            {media.length > 0 && (
+              <ul className="mt-4 space-y-1 text-sm">
+                {media.map((m) => <li key={m.id} className="flex gap-2"><span className="text-green-600" aria-hidden>✓</span>{m.name || "File"} <span className="text-slate-500">({Math.max(1, Math.round(m.size / 1024 / 1024))} MB)</span></li>)}
+              </ul>
+            )}
+            {open && <div className="mt-4"><MediaUploader token={token} remaining={10 - media.length} /></div>}
+          </div>
+        )}
+        {s.phone && <p className="mt-6 text-sm text-slate-600">Questions? Call <a className="underline" href={`tel:${s.phone.replace(/[^\d+]/g, "")}`}>{s.phone}</a>.</p>}
+      </div>
+    </div>
+  );
+}

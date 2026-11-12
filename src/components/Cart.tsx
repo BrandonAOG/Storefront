@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { track } from "./Tracker";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 export type CartLine = { serviceId: number; qty: number };
@@ -53,6 +54,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       ready,
       count: lines.reduce((n, l) => n + l.qty, 0),
       add: (serviceId) => {
+        track("add_to_cart");
         const existing = lines.find((l) => l.serviceId === serviceId);
         save(
           existing

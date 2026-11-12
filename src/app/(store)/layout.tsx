@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CartButton, CartProvider } from "@/components/Cart";
+import { Tracker } from "@/components/Tracker";
 import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -8,6 +9,7 @@ export default async function StoreLayout({ children }: { children: React.ReactN
   const s = await getSettings();
   return (
     <CartProvider>
+      <Tracker />
       <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-950 text-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
           <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight">

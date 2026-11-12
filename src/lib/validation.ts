@@ -10,6 +10,7 @@ export const contactSchema = z.object({
   address: required(200, "Street address"),
   city: required(100, "City"),
   zip: text(10).regex(/^\d{5}(-\d{4})?$/, "Enter a 5-digit ZIP code"),
+  smsConsent: z.boolean().default(false),
 });
 
 export const orderSchema = contactSchema.extend({
@@ -39,6 +40,8 @@ export const visitSchema = z.object({
   details: text(2000).default(""),
   preferredDay: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/).default(""),
   preferredTime: z.enum(["", "Morning", "Afternoon", "Evening"]).default(""),
+  mode: z.enum(["live", "async"]).default("live"),
+  smsConsent: z.boolean().default(false),
   website: z.string().max(0).optional(),
 });
 

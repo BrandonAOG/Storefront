@@ -23,6 +23,8 @@ export default async function ServicePage({ params }: { params: Promise<{ slug: 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12">
       <Link href="/#services" className="text-sm text-slate-500 hover:underline">← All services</Link>
+      {/* eslint-disable-next-line @next/next/no-img-element -- admin-supplied image address */}
+      {s.imageUrl && <img src={s.imageUrl} alt="" className="mt-6 h-64 w-full rounded-2xl object-cover" />}
       <p className="mt-6 text-sm font-semibold uppercase tracking-widest text-slate-500">{s.category}</p>
       <h1 className="mt-1 text-4xl font-bold tracking-tight">{s.name}</h1>
       <p className="mt-3 text-lg text-slate-600">{s.summary}</p>
@@ -45,6 +47,16 @@ export default async function ServicePage({ params }: { params: Promise<{ slug: 
           </>
         )}
       </div>
+      {s.includes.trim() && (
+        <div className="mt-8">
+          <h2 className="text-lg font-bold">What&apos;s included</h2>
+          <ul className="mt-3 space-y-2">
+            {s.includes.split("\n").filter((l) => l.trim()).map((line) => (
+              <li key={line} className="flex gap-2"><span className="text-green-600" aria-hidden>✓</span>{line}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {s.description && <div className="mt-8 whitespace-pre-line leading-relaxed text-slate-700">{s.description}</div>}
     </div>
   );

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
+import { ManageBilling } from "@/components/ManageBilling";
 import { money } from "@/lib/format";
 import { syncMembershipPayment } from "@/lib/payments";
 
@@ -28,7 +29,10 @@ export default async function PlanThanks({ params }: { params: Promise<{ token: 
               : `Thanks, ${m.name.split(" ")[0]}. We have your request for the ${m.planName} plan and will contact you to finish setup.`}
         </p>
         <p className="mt-4 text-sm"><strong>{m.planName}</strong> – {money(m.priceCents)} / {m.interval}</p>
-        <Link href="/" className="btn btn-ghost mt-6">Back to home</Link>
+        <div className="mt-6 flex flex-wrap gap-3">
+          {m.status === "active" && m.stripeCustomerId && <ManageBilling token={token} />}
+          <Link href="/" className="btn btn-ghost">Back to home</Link>
+        </div>
       </div>
     </div>
   );

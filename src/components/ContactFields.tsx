@@ -34,3 +34,13 @@ export function Honeypot({ value, onChange }: { value: string; onChange: (v: str
     </div>
   );
 }
+
+/** Texts are only sent to people who tick this box. */
+export function SmsConsent({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="mt-4 flex items-start gap-2 text-sm text-slate-600">
+      <input type="checkbox" className="mt-1" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span>Text me updates about my appointment. Message and data rates may apply. Reply STOP to opt out.</span>
+    </label>
+  );
+}

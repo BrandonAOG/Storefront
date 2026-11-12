@@ -10,12 +10,19 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Allows a service photo (up to 4 MB) to be uploaded from the admin form.
+  experimental: { serverActions: { bodySizeLimit: "5mb" } },
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
       // Never let a shared cache keep admin or order pages.
       { source: "/admin/:path*", headers: [{ key: "Cache-Control", value: "no-store" }] },
-      { source: "/order/:path*", headers: [{ key: "Cache-Control", value: "no-store" }, { key: "X-Robots-Tag", value: "noindex" }] },
+      // Private customer links: never cached, never indexed.
+      ...["order", "quote", "visit", "feedback", "unsubscribe", "plans/thanks"].map((p) => ({
+        source: `/${p}/:path*`,
+        headers: [{ key: "Cache-Control", value: "no-store" }, { key: "X-Robots-Tag", value: "noindex" }, { key: "Referrer-Policy", value: "no-referrer" }],
+      })),
+      { source: "/api/v1/:path*", headers: [{ key: "Cache-Control", value: "no-store" }] },
     ];
   },
   turbopack: {

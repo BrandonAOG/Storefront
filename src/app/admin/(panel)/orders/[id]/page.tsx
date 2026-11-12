@@ -29,7 +29,8 @@ export default async function OrderDetail({ params, searchParams }: { params: Pr
           <p className="mt-2">{o.address}<br />{o.city} {o.zip}</p>
           <p className="mt-2"><a className="underline" href={`tel:${o.phone.replace(/[^\d+]/g, "")}`}>{o.phone}</a><br /><a className="underline" href={`mailto:${o.email}`}>{o.email}</a></p>
           {o.notes && <p className="mt-2 whitespace-pre-line rounded-lg bg-slate-100 p-3">{o.notes}</p>}
-          <p className="mt-3"><Link className="underline" href={`/order/${o.token}`}>Customer confirmation page ↗</Link></p>
+          <p className="mt-2 text-slate-500">Came from: {o.source}{o.campaign && ` / ${o.campaign}`}</p>
+          <p className="mt-3"><Link className="underline" href={`/order/${o.token}`}>Customer confirmation page ↗</Link>{o.customerId && <> · <Link className="underline" href={`/admin/customers/${o.customerId}`}>Customer history</Link></>}</p>
         </div>
         <div className="card text-sm">
           <h2 className="font-bold">Items</h2>
@@ -44,7 +45,7 @@ export default async function OrderDetail({ params, searchParams }: { params: Pr
             <label><span className="label">Payment</span><Select name="paymentStatus" value={o.paymentStatus} options={["unpaid", "paid", "refunded"]} /></label>
             <button className="btn btn-dark col-span-2">Save</button>
           </form>
-          <p className="mt-2 text-xs text-slate-500">Changing these only updates this record. Refunds are issued from your Stripe dashboard.</p>
+          <p className="mt-2 text-xs text-slate-500">Marking a job completed starts the feedback request. Refunds are issued from your Stripe dashboard.</p>
         </div>
       </div>
     </>

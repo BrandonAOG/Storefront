@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import type Stripe from "stripe";
 import { db, schema } from "@/db";
-import { markMembershipActive, markOrderPaid } from "@/lib/payments";
+import { membershipChanged, orderChanged } from "@/lib/notify";
+import { markMembershipActive, markOrderPaid, markQuotePaid } from "@/lib/payments";
 import { stripe, stripeEnabled } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
@@ -28,9 +29,11 @@ export async function POST(req: Request) {
       if (!id) break;
       if (session.metadata?.kind === "order" && session.payment_status === "paid") {
         await markOrderPaid(id);
+      } else if (session.metadata?.kind === "quote" && session.payment_status === "paid") {
+        await markQuotePaid(id);
       } else if (session.metadata?.kind === "membership") {
-        const sub = typeof session.subscription === "string" ? session.subscription : (session.subscription?.id ?? null);
-        await markMembershipActive(id, sub);
+        const idOf = (v: string | { id: string } | null) => (typeof v === "string" ? v : (v?.id ?? null));
+        await markMembershipActive(id, idOf(session.subscription), idOf(session.customer));
       }
       break;
     }
@@ -38,18 +41,22 @@ export async function POST(req: Request) {
       const session = event.data.object;
       const id = session.metadata?.id;
       if (id && session.metadata?.kind === "order") {
-        await db()
+        const changed = await db()
           .update(schema.orders)
           .set({ status: "cancelled" })
-          .where(and(eq(schema.orders.id, id), eq(schema.orders.status, "pending")));
+          .where(and(eq(schema.orders.id, id), eq(schema.orders.status, "pending")))
+          .returning({ id: schema.orders.id });
+        if (changed.length) await orderChanged(id, "order.cancelled");
       }
       break;
     }
     case "customer.subscription.deleted": {
-      await db()
+      const changed = await db()
         .update(schema.memberships)
-        .set({ status: "cancelled" })
-        .where(eq(schema.memberships.stripeSubscriptionId, event.data.object.id));
+        .set({ status: "cancelled", cancelledAt: new Date() })
+        .where(eq(schema.memberships.stripeSubscriptionId, event.data.object.id))
+        .returning({ id: schema.memberships.id });
+      for (const m of changed) await membershipChanged(m.id, "membership.cancelled");
       break;
     }
   }

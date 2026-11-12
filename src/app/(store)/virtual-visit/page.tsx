@@ -25,7 +25,7 @@ export default async function VirtualVisitPage({ searchParams }: { searchParams:
           <li><strong className="block text-base text-slate-900">3. Get your quote</strong>We size the system and send you a written quote.</li>
         </ul>
       </div>
-      <VisitForm topics={topics} initialTopic={topic && topics.includes(topic) ? topic : ""} minDay={todayLocal()} />
+      <VisitForm topics={topics} initialTopic={topic && topics.includes(topic) ? topic : ""} minDay={todayLocal()} uploads={Boolean(process.env.BLOB_READ_WRITE_TOKEN)} />
     </div>
   );
 }

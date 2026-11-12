@@ -9,10 +9,16 @@ const nav = [
   ["/admin", "Overview"],
   ["/admin/orders", "Bookings"],
   ["/admin/visits", "Virtual visits"],
+  ["/admin/quotes", "Estimates"],
   ["/admin/memberships", "Memberships"],
+  ["/admin/customers", "Customers"],
+  ["/admin/feedback", "Feedback"],
+  ["/admin/analytics", "Analytics"],
+  ["/admin/messages", "Messages"],
   ["/admin/services", "Services"],
   ["/admin/plans", "Plans"],
   ["/admin/availability", "Availability"],
+  ["/admin/integrations", "Integrations"],
   ["/admin/settings", "Settings"],
 ];
 

@@ -32,8 +32,8 @@ export const occupiesSlot = sql`(
 )`;
 
 /** Every bookable arrival window in the booking horizon, with remaining capacity. */
-export async function getAvailability(s: Settings): Promise<DaySlots[]> {
-  const first = addDays(todayLocal(), Math.max(0, s.leadDays));
+export async function getAvailability(s: Settings, extraLeadDays = 0): Promise<DaySlots[]> {
+  const first = addDays(todayLocal(), Math.max(0, s.leadDays, extraLeadDays));
   const last = addDays(first, Math.max(1, s.horizonDays) - 1);
 
   const [hourRows, blackoutRows, taken] = await Promise.all([
@@ -69,8 +69,8 @@ export async function getAvailability(s: Settings): Promise<DaySlots[]> {
 }
 
 /** Is this exact window one the business offers? (Capacity is checked separately, under a lock.) */
-export async function findSlot(s: Settings, day: string, startMin: number): Promise<Slot | null> {
-  const all = await getAvailability(s);
+export async function findSlot(s: Settings, day: string, startMin: number, extraLeadDays = 0): Promise<Slot | null> {
+  const all = await getAvailability(s, extraLeadDays);
   return all.find((d) => d.day === day)?.slots.find((x) => x.startMin === startMin) ?? null;
 }
 

@@ -9,15 +9,38 @@ Built with Next.js 16 (App Router), TypeScript, Tailwind CSS, Postgres
 
 ## What's in it
 
-| Area | Address | What it does |
-| --- | --- | --- |
-| Storefront | `/` | Services grouped by category with prices, plans, FAQ |
-| Service page | `/services/<name>` | Details and "Add to booking" (or "Get a quote") |
-| Booking | `/book` | Cart → details → arrival window → review → pay |
-| Confirmation | `/order/<token>` | Private link showing the booking and payment state |
-| Plans | `/plans`, `/plans/<name>` | Compare plans and subscribe |
-| Virtual visit | `/virtual-visit` | Request a remote consultation |
-| Admin | `/admin` | Overview, bookings, visits, memberships, services, plans, availability, settings |
+**For customers**
+
+| Address | What it does |
+| --- | --- |
+| `/` | Services with photos and prices, plans, FAQ. Headline can be A/B tested |
+| `/services/<name>` | Details, "what's included" checklist, add to booking or get a quote |
+| `/book` | Cart → details → arrival window → review → pay |
+| `/order/<token>` | Private booking confirmation |
+| `/plans`, `/plans/<name>` | Compare plans and subscribe; members can update their card or cancel |
+| `/virtual-visit` | Ask for a live call, or send a video for review |
+| `/visit/<token>` | Customer's visit page: upload photos and video, join the meeting |
+| `/quote/<token>` | Personal estimate: tick optional add-ons, accept, pay a deposit |
+| `/feedback/<token>` | 0–10 score and comment; happy customers are sent to your review page |
+| `/unsubscribe/<token>` | Stop reminders and offers |
+
+**For you (`/admin`)**
+
+| Page | What it does |
+| --- | --- |
+| Overview | Upcoming jobs and headline numbers |
+| Bookings | Every booking; mark completed, paid, cancelled |
+| Virtual visits | Requests, the customer's photos and video, notes pinned to moments in a video, "turn into an estimate" |
+| Estimates | Build, send, track opened and accepted |
+| Memberships | Plan sign-ups and their status |
+| Customers | One record per customer with full history, notes and message preferences |
+| Feedback | Scores, comments and Net Promoter Score |
+| Analytics | Booking funnel, where customers come from, revenue by source, estimate close rate, A/B test results |
+| Messages | Edit every email and text, switch each on or off, see what was sent |
+| Services, Plans | Prices, photos, descriptions, per-service ZIP codes and notice period |
+| Availability | Hours, window length, crews, days off |
+| Integrations | What's connected, webhooks, API keys |
+| Settings | Business details, service area, deposit, alerts, review link, headline and A/B test |
 
 ## Run it locally
 
@@ -46,9 +69,71 @@ them in the admin area before customers see the site.
 | `SESSION_SECRET` | yes | 32+ random characters used to sign the admin cookie |
 | `STRIPE_SECRET_KEY` | optional | Turns on online payment |
 | `STRIPE_WEBHOOK_SECRET` | with Stripe | Verifies payment notifications from Stripe |
+| `RESEND_API_KEY`, `EMAIL_FROM` | optional | Turns on email |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | optional | Turns on text messages |
+| `BLOB_READ_WRITE_TOKEN` | optional | Turns on photo and video uploads |
+| `CRON_SECRET` | optional | Turns on the daily reminder job |
 
-Without Stripe keys the site still works: bookings are confirmed with payment
-due at service, and plan sign-ups arrive as requests.
+Every optional feature degrades cleanly when it isn't connected. Without Stripe,
+bookings are confirmed with payment due at service. Without email or texting,
+messages are recorded in **Admin → Messages** but not sent. Without Blob, the
+upload buttons are hidden. **Admin → Integrations** shows what is connected.
+
+## Turning on email, texts, uploads and reminders
+
+- **Email:** create a Resend account, verify your domain, create an API key, set
+  `RESEND_API_KEY` and `EMAIL_FROM`. Add your postal address in Admin → Settings;
+  it is required in reminder and offer emails.
+- **Texts:** buy a Twilio number and complete Twilio's A2P 10DLC registration
+  (US carriers block unregistered business texting). Set the three `TWILIO_` values.
+  Texts only go to customers who ticked "text me updates".
+- **Uploads:** in Vercel, Storage → Blob → create a **public** store and connect it
+  to the project. That sets `BLOB_READ_WRITE_TOKEN`.
+- **Daily reminders:** set `CRON_SECRET` to 16+ random characters. `vercel.json`
+  already schedules `/api/cron` once a day at 14:00 UTC. You can also press
+  "Run today's reminders now" in Admin → Messages.
+
+## Automated messages
+
+All editable in Admin → Messages.
+
+| Message | Sent |
+| --- | --- |
+| Booking confirmation | Immediately |
+| Virtual visit received | Immediately, with the upload link |
+| Estimate delivery | When you press "Save and send" |
+| Plan welcome | Immediately |
+| Appointment reminder | 1 day before (adjustable) |
+| Feedback and review request | 2 days after a job is marked completed |
+| Rebooking reminder | 335 days after the last completed job |
+| Unfinished booking follow-up | 1 day after an unpaid checkout |
+| Win-back | After 540 days of inactivity |
+| Loyalty thank-you | After 3 completed jobs |
+
+The last five are marketing messages: they carry an unsubscribe link and stop
+when a customer unsubscribes. The same message is never sent twice for the same
+booking.
+
+## Webhooks and API
+
+- **Webhooks** (Admin → Integrations) POST JSON to an https address when things
+  happen: `order.confirmed`, `order.completed`, `order.cancelled`, `visit.created`,
+  `quote.sent`, `quote.accepted`, `membership.created`, `membership.active`,
+  `membership.cancelled`, `feedback.received`. Use "Webhooks by Zapier", Make or
+  n8n to pass them on to dispatch or accounting software.
+  Verify with `X-AOG-Signature: sha256=HMAC_SHA256(secret, timestamp + "." + body)`.
+  Failed deliveries are retried by the daily job, up to 5 times.
+- **API** is read-only: `GET /api/v1/orders|customers|visits|quotes|memberships|feedback`
+  with `Authorization: Bearer <key>`, optional `?limit=` and `?since=`.
+
+## Tracking and A/B testing
+
+Each storefront visitor gets an anonymous random id in a first-party cookie
+(`aog_vid`). It counts funnel steps and picks the A or B headline. A second
+cookie (`aog_attr`) remembers the first source that brought them (`utm_source`,
+`utm_campaign`, or the referring site) for 90 days. No names or contact details
+are stored against these until the visitor books. Mention these cookies in your
+privacy policy.
 
 ## Turning on payments
 
@@ -81,19 +166,24 @@ In **Admin → Settings**, "Charged at checkout" sets pay-in-full (100) or a dep
 - Prices are always read from the database on the server; the browser only sends service IDs and quantities.
 - Every admin page and every admin action checks the signed session cookie (HttpOnly, SameSite=Lax, 12 h).
 - All form input is validated with zod. Customer text is rendered as text, never as HTML.
+- Links stored from admin forms (meeting, review, image) must be `https://`, so they can't be `javascript:` links.
 - Stripe webhooks are rejected unless the signature matches.
-- Confirmation links use a 192-bit random token and are marked `noindex` / `no-store`.
-- Server logs never include customer names, addresses or contact details.
+- Private customer links use a 192-bit random token and are marked `noindex`, `no-store` and `no-referrer`.
+- Outgoing webhooks may only target public https addresses. Private, loopback and link-local addresses are refused when saved and again on every send, and redirects are not followed. A DNS-rebinding window between the check and the request remains; only add addresses you trust.
+- API keys are stored as SHA-256 hashes and shown once. The API is read-only and never returns private link tokens.
+- The daily job endpoint requires `CRON_SECRET`.
+- Server logs never include customer names, addresses, contact details or message text.
+- **Uploaded photos and videos are in a public Blob store.** Their addresses contain a long random suffix and are only shown in the admin area and on the customer's own page, but anyone who has an address can open the file. Move to a private store with a signed proxy before storing anything sensitive.
 - The rate limiter in `src/lib/ratelimit.ts` is in-memory, so on serverless hosting it only slows abuse.
-  Add a Vercel Firewall rate-limit rule for `/book`, `/plans/*`, `/virtual-visit` and `/admin/login`.
+  Add a Vercel Firewall rate-limit rule for `/book`, `/plans/*`, `/virtual-visit`, `/api/track`, `/api/v1/*` and `/admin/login`.
 - No Content-Security-Policy is set yet. Next.js needs a nonce-based policy; see
   `node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md`.
 
-## Not built yet
+## Not built
 
-- Email or text confirmations to the customer and new-booking alerts to you.
 - Sales tax (Stripe Tax can add it at checkout).
-- Dispatch or calendar sync (Google Calendar, Housecall Pro, ServiceTitan and the like).
+- Direct two-way sync with a specific dispatch or calendar product; use webhooks or the API.
 - Customer self-service rescheduling or cancellation.
 - Individual admin accounts; there is one shared password.
-- Photo upload and in-app video for virtual visits; you paste in a Zoom, Meet or Teams link.
+- Built-in video calling; you paste in a Zoom, Meet or Teams link.
+- Drawing on top of a video; review notes are text pinned to a moment in the video.
