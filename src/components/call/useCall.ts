@@ -16,6 +16,9 @@ export type CallState = {
   muted: boolean;
   cameraOff: boolean;
   facing: Facing;
+  /** Whether this device is sending a camera picture / microphone sound at all. */
+  hasCamera: boolean;
+  hasMic: boolean;
 };
 
 /**
@@ -37,7 +40,7 @@ class CallEngine {
   private alive = false;
 
   constructor(private opts: Options) {
-    this.state = { status: "idle", error: "", local: null, remote: null, muted: false, cameraOff: false, facing: opts.role === "customer" ? "environment" : "user" };
+    this.state = { status: "idle", error: "", local: null, remote: null, muted: false, cameraOff: false, facing: opts.role === "customer" ? "environment" : "user", hasCamera: false, hasMic: false };
   }
 
   subscribe = (fn: () => void) => {
@@ -66,10 +69,21 @@ class CallEngine {
     const p = new RTCPeerConnection({ iceServers: this.opts.iceServers });
     this.pc = p;
     this.stream?.getTracks().forEach((t) => p.addTrack(t, this.stream!));
+    if (this.opts.role === "rep") {
+      // The rep makes the offer, and an offer only asks for what it lists. If this
+      // computer has no camera (or no microphone), still ask to RECEIVE the
+      // customer's picture and sound; otherwise their video would never be sent.
+      if (!this.stream?.getVideoTracks().length) p.addTransceiver("video", { direction: "recvonly" });
+      if (!this.stream?.getAudioTracks().length) p.addTransceiver("audio", { direction: "recvonly" });
+    }
     p.onicecandidate = (e) => {
       if (e.candidate) void this.send("ice", { sid: this.sid, candidate: e.candidate.toJSON() });
     };
-    p.ontrack = (e) => this.set({ remote: e.streams[0] ?? new MediaStream([e.track]) });
+    // Sound and picture arrive as separate tracks. Build a fresh stream from
+    // everything received so far, so the screen updates as each one arrives.
+    p.ontrack = () => {
+      if (this.pc === p) this.set({ remote: new MediaStream(p.getReceivers().map((r) => r.track).filter((t) => t.readyState === "live")) });
+    };
     p.onconnectionstatechange = () => {
       if (this.pc !== p) return;
       if (p.connectionState === "connected") this.set({ status: "connected" });
@@ -153,14 +167,22 @@ class CallEngine {
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("unsupported");
       const video = { facingMode: { ideal: this.state.facing }, width: { ideal: 1920 }, height: { ideal: 1080 } };
+      const denied = (err: unknown) => err instanceof Error && /NotAllowed|Permission/.test(err.name);
       try {
         this.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video });
       } catch (err) {
-        if (err instanceof Error && /NotAllowed|Permission/.test(err.name)) throw err;
-        // No usable camera: fall back to a voice-only call.
-        this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (denied(err)) throw err;
+        try {
+          // No usable camera: carry on with sound only.
+          this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (err2) {
+          // No microphone either. The rep can still watch and listen; a customer needs at least a microphone.
+          if (denied(err2) || this.opts.role !== "rep") throw err2;
+          this.stream = new MediaStream();
+        }
       }
-      this.set({ local: this.stream, cameraOff: this.stream.getVideoTracks().length === 0 });
+      const hasCamera = this.stream.getVideoTracks().length > 0;
+      this.set({ local: this.stream, hasCamera, hasMic: this.stream.getAudioTracks().length > 0, cameraOff: !hasCamera });
       const init = await fetch(`${this.opts.signalUrl}?init=1`).then((r) => (r.ok ? r.json() : Promise.reject(new Error("signal"))));
       this.cursor = init.cursor;
       this.alive = true;
@@ -217,7 +239,7 @@ class CallEngine {
       await this.pc?.getSenders().find((s) => s.track?.kind === "video" || s.track === old)?.replaceTrack(track);
       if (old) this.stream?.removeTrack(old);
       this.stream?.addTrack(track);
-      this.set({ facing: next, cameraOff: false, local: new MediaStream(this.stream?.getTracks() ?? [track]) });
+      this.set({ facing: next, cameraOff: false, hasCamera: true, local: new MediaStream(this.stream?.getTracks() ?? [track]) });
     } catch {
       /* this device has only one camera */
     }

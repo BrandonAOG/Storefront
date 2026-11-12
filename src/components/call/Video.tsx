@@ -3,10 +3,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 /** A <video> that plays a live stream. `muted` is for your own picture, so you don't hear yourself. */
-export const Video = forwardRef<HTMLVideoElement, { stream: MediaStream | null; muted?: boolean; className?: string; mirror?: boolean }>(function Video(
-  { stream, muted = false, className = "", mirror = false },
-  ref,
-) {
+type VideoProps = { stream: MediaStream | null; muted?: boolean; className?: string; mirror?: boolean; onPicture?: (showing: boolean) => void };
+
+export const Video = forwardRef<HTMLVideoElement, VideoProps>(function Video({ stream, muted = false, className = "", mirror = false, onPicture }, ref) {
   const el = useRef<HTMLVideoElement>(null);
   useImperativeHandle(ref, () => el.current!, []);
   useEffect(() => {
@@ -14,7 +13,21 @@ export const Video = forwardRef<HTMLVideoElement, { stream: MediaStream | null; 
     el.current.srcObject = stream;
     if (stream) void el.current.play().catch(() => {});
   }, [stream]);
-  return <video ref={el} autoPlay playsInline muted={muted} className={`${className} ${mirror ? "-scale-x-100" : ""}`} />;
+  // Reports whether real frames are on screen (the picture has a size).
+  const report = () => onPicture?.(Boolean(el.current && el.current.videoWidth > 0));
+  return (
+    <video
+      ref={el}
+      autoPlay
+      playsInline
+      muted={muted}
+      onLoadedMetadata={report}
+      onResize={report}
+      onPlaying={report}
+      onEmptied={() => onPicture?.(false)}
+      className={`${className} ${mirror ? "-scale-x-100" : ""}`}
+    />
+  );
 });
 
 export const statusText: Record<string, string> = {

@@ -50,7 +50,8 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
   }, [connected]);
 
   const live = call.status === "waiting" || call.status === "connecting" || connected;
-  const hasPicture = Boolean(call.remote?.getVideoTracks().length);
+  // "Has a picture" means frames are actually arriving, not just that a video track exists.
+  const [hasPicture, setHasPicture] = useState(false);
 
   /** Grab the current frame of the customer's video at its full resolution. */
   const snapshot = async () => {
@@ -111,15 +112,21 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
             </div>
           ) : (
             <>
-              <Video ref={remoteVideo} stream={call.remote} className="h-full max-h-[calc(100dvh-9.5rem)] w-full flex-1 object-contain" />
-              {!hasPicture && <p className="absolute inset-0 grid place-items-center text-slate-400">{connected ? "The customer's camera is off" : statusText[call.status]}</p>}
-              <div className="absolute bottom-24 left-3 h-24 w-36 overflow-hidden rounded-lg border border-white/30 bg-slate-900">
-                <Video stream={call.local} muted mirror className="h-full w-full object-cover" />
-              </div>
+              <Video ref={remoteVideo} stream={call.remote} onPicture={setHasPicture} className="h-full max-h-[calc(100dvh-9.5rem)] w-full flex-1 object-contain" />
+              {!hasPicture && <p className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-slate-400">{connected ? "Waiting for the customer's camera picture…" : statusText[call.status]}</p>}
+              {call.hasCamera ? (
+                <div className="absolute bottom-24 left-3 h-24 w-36 overflow-hidden rounded-lg border border-white/30 bg-slate-900">
+                  <Video stream={call.local} muted mirror className="h-full w-full object-cover" />
+                </div>
+              ) : (
+                <p className="absolute bottom-24 left-3 max-w-56 rounded-lg bg-black/70 px-3 py-2 text-xs text-slate-200">
+                  {call.hasMic ? "No camera on this computer. The customer can hear you but not see you." : "No camera or microphone on this computer. You can see and hear the customer, but they can't hear you."}
+                </p>
+              )}
               {flash && <p role="status" className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-black/80 px-4 py-1.5 text-sm">{flash}</p>}
               <div className="flex justify-center gap-3 border-t border-white/10 bg-slate-950 p-3">
-                <CallButton onClick={call.toggleMute} label={call.muted ? "Unmute microphone" : "Mute microphone"} active={call.muted}>{call.muted ? "Unmute" : "Mute"}</CallButton>
-                <CallButton onClick={call.toggleCamera} label={call.cameraOff ? "Turn camera on" : "Turn camera off"} active={call.cameraOff}>{call.cameraOff ? "Cam on" : "Cam off"}</CallButton>
+                <CallButton onClick={call.toggleMute} label={call.muted ? "Unmute microphone" : "Mute microphone"} active={call.muted} disabled={!call.hasMic}>{call.muted ? "Unmute" : "Mute"}</CallButton>
+                <CallButton onClick={call.toggleCamera} label={call.cameraOff ? "Turn camera on" : "Turn camera off"} active={call.hasCamera && call.cameraOff} disabled={!call.hasCamera}>{call.hasCamera && !call.cameraOff ? "Cam off" : "Cam on"}</CallButton>
                 <CallButton onClick={() => void snapshot()} label="Take a snapshot of the customer's video" disabled={!hasPicture}>Snapshot</CallButton>
                 <CallButton onClick={call.hangUp} label="End call" danger>End</CallButton>
               </div>

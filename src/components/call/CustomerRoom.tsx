@@ -31,7 +31,7 @@ export function CustomerRoom({ token, business, firstName, iceServers }: { token
     <div className="relative h-dvh overflow-hidden bg-black text-white">
       {/* Their own camera, full screen: this is what the specialist sees. */}
       <Video stream={call.local} muted mirror={call.facing === "user"} className="h-full w-full object-cover" />
-      {call.cameraOff && <p className="absolute inset-0 grid place-items-center bg-black text-slate-400">Your camera is off</p>}
+      {call.cameraOff && <p className="absolute inset-0 grid place-items-center bg-black px-6 text-center text-slate-400">{call.hasCamera ? "Your camera is off" : "We couldn't open your camera. Close other apps using it, then leave and rejoin."}</p>}
 
       <p role="status" className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-6 text-center text-sm font-semibold">
         {call.status === "connected" ? `Connected with ${business}` : statusText[call.status]}
