@@ -293,6 +293,27 @@ async function removeStoredFiles(urls: string[]) {
   await del(stored).catch((err) => console.error("Could not remove stored files:", err instanceof Error ? err.message : "unknown error"));
 }
 
+/** Give a photo, video or snapshot a name, e.g. "Main panel". */
+export async function renameMedia(mediaId: string, name: string): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  const id = uuid.safeParse(mediaId);
+  const clean = z.string().trim().min(1).max(80).safeParse(name);
+  if (!id.success || !clean.success) return { ok: false };
+  const changed = await db().update(schema.visitMedia).set({ name: clean.data }).where(eq(schema.visitMedia.id, id.data)).returning({ id: schema.visitMedia.id });
+  return { ok: changed.length > 0 };
+}
+
+/** Permanently deletes one photo, video or snapshot, with its measurements. Notes pinned to it are kept. */
+export async function deleteMedia(mediaId: string): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  const id = uuid.safeParse(mediaId);
+  if (!id.success) return { ok: false };
+  await db().update(schema.visitNotes).set({ mediaId: null, atSeconds: null }).where(eq(schema.visitNotes.mediaId, id.data));
+  const gone = await db().delete(schema.visitMedia).where(eq(schema.visitMedia.id, id.data)).returning({ url: schema.visitMedia.url });
+  await removeStoredFiles(gone.map((m) => m.url));
+  return { ok: gone.length > 0 };
+}
+
 /**
  * Permanently deletes a virtual visit request with its photos, videos,
  * snapshots, measurements and notes. Estimates made from it are kept.

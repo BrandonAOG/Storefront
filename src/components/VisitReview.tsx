@@ -1,6 +1,8 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { MediaActions } from "./MediaActions";
 import { MeasureTool, type MeasureMeta } from "./MeasureTool";
 
 type Media = { id: string; url: string; name: string; contentType: string; kind: string; meta: MeasureMeta | null };
@@ -21,7 +23,10 @@ export function VisitReview({ visitId, media, notes, addNote, deleteNote, saveMe
   const [current, setCurrent] = useState(media[0]?.id ?? "");
   const [at, setAt] = useState<number | null>(null);
   const video = useRef<HTMLVideoElement>(null);
-  const active = media.find((m) => m.id === current);
+  const router = useRouter();
+  // If the open file was deleted, fall back to the first one that's left.
+  const active = media.find((m) => m.id === current) ?? media[0];
+  const label = (m: Media, i: number) => (m.name && !/^Snapshot \d|\.(jpe?g|png|heic|mp4|mov|webm)$/i.test(m.name) ? m.name : `${m.contentType.startsWith("video/") ? "Video" : m.kind === "snapshot" ? "Snapshot" : "Photo"} ${i + 1}`);
   const isVideo = active?.contentType.startsWith("video/");
 
   const jump = (n: Note) => {
@@ -41,11 +46,17 @@ export function VisitReview({ visitId, media, notes, addNote, deleteNote, saveMe
         {!active && <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">No photos, video or snapshots yet.</p>}
         {active && isVideo && <video key={active.id} ref={video} src={active.url} controls playsInline className="max-h-[480px] w-full rounded-xl bg-black" />}
         {active && !isVideo && <MeasureTool key={active.id} mediaId={active.id} url={active.url} name={active.name} initial={active.meta} save={saveMeasure} />}
+        {active && (
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-semibold">{active.name || "Unnamed"}</span>
+            <MediaActions key={active.id} id={active.id} name={active.name} onRenamed={() => router.refresh()} onDeleted={() => { setAt(null); router.refresh(); }} />
+          </div>
+        )}
         {media.length > 1 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {media.map((m, i) => (
-              <button key={m.id} type="button" onClick={() => { setCurrent(m.id); setAt(null); }} className={`rounded-lg border px-3 py-1 text-xs font-semibold ${m.id === current ? "border-ink bg-ink text-white" : "border-slate-300 bg-white"}`}>
-                {m.contentType.startsWith("video/") ? "Video" : m.kind === "snapshot" ? "Snapshot" : "Photo"} {i + 1}
+              <button key={m.id} type="button" onClick={() => { setCurrent(m.id); setAt(null); }} className={`max-w-48 truncate rounded-lg border px-3 py-1 text-xs font-semibold ${m.id === active?.id ? "border-ink bg-ink text-white" : "border-slate-300 bg-white"}`}>
+                {label(m, i)}
               </button>
             ))}
           </div>

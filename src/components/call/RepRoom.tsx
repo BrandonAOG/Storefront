@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { MeasureTool, type MeasureMeta } from "../MeasureTool";
+import { MediaActions } from "../MediaActions";
+import { MicMeter } from "./MicMeter";
 import { Icon } from "./Icons";
 import { CallButton, frameFromClick, frameToBox, PointerMark, statusText, Video } from "./Video";
 import { useCall, type Device, type Shared } from "./useCall";
@@ -256,6 +258,7 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
               ) : (
                 <p className="text-slate-300">{call.hasMic ? "No camera on this computer. The customer can hear you but not see you." : "No camera or microphone on this computer. You can see and hear the customer, but they can't hear you."}</p>
               )}
+              <MicMeter stream={call.local} muted={call.muted} />
             </div>
           )}
           <Section title="Customer details" open>
@@ -274,11 +277,24 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
             {shots.length === 0 && <p className="text-slate-400">Press the camera button during the call to save a still, then click it to measure.</p>}
             <div className="grid grid-cols-2 gap-2">
               {shots.map((s) => (
-                <button key={s.id} type="button" onClick={() => setOpen(s)} className="relative overflow-hidden rounded-lg border border-white/20 text-left" aria-label={`Open ${s.name} to measure`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- saved snapshot */}
-                  <img src={s.url} alt="" className="aspect-video w-full object-cover" />
-                  <span className="block truncate bg-black/60 px-2 py-1 text-xs">{s.meta?.lines?.length ? `${s.meta.lines.length} measured` : "Click to measure"}</span>
-                </button>
+                <div key={s.id} className="overflow-hidden rounded-lg border border-white/20">
+                  <button type="button" onClick={() => setOpen(s)} className="relative block w-full text-left" aria-label={`Open ${s.name} to measure`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- saved snapshot */}
+                    <img src={s.url} alt="" className="aspect-video w-full object-cover" />
+                    <span className="block truncate bg-black/60 px-2 pt-1 text-xs font-bold" title={s.name}>{s.name}</span>
+                    <span className="block truncate bg-black/60 px-2 pb-1 text-[11px] text-slate-300">{s.meta?.lines?.length ? `${s.meta.lines.length} measured` : "Click to measure"}</span>
+                  </button>
+                  <MediaActions
+                    id={s.id}
+                    name={s.name}
+                    dark
+                    onRenamed={(name) => setShots((all) => all.map((x) => (x.id === s.id ? { ...x, name } : x)))}
+                    onDeleted={() => {
+                      setShots((all) => all.filter((x) => x.id !== s.id));
+                      setOpen((o) => (o?.id === s.id ? null : o));
+                    }}
+                  />
+                </div>
               ))}
             </div>
           </Section>

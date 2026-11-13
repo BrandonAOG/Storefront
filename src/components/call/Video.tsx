@@ -11,17 +11,35 @@ type VideoProps = {
   /** Which speaker to play through (where the browser supports choosing). */
   sinkId?: string;
   onPicture?: (showing: boolean) => void;
+  /** Called with true when the browser refuses to play sound until the person taps the page. */
+  onBlocked?: (blocked: boolean) => void;
   style?: React.CSSProperties;
 };
 
 /** A <video> that plays a live stream. `muted` is for your own picture, so you don't hear yourself. */
-export const Video = forwardRef<HTMLVideoElement, VideoProps>(function Video({ stream, muted = false, className = "", mirror = false, sinkId, onPicture, style }, ref) {
+export const Video = forwardRef<HTMLVideoElement, VideoProps>(function Video({ stream, muted = false, className = "", mirror = false, sinkId, onPicture, onBlocked, style }, ref) {
   const el = useRef<HTMLVideoElement>(null);
   useImperativeHandle(ref, () => el.current!, []);
   useEffect(() => {
     if (!el.current) return;
-    el.current.srcObject = stream;
-    if (stream) void el.current.play().catch(() => {});
+    const v = el.current;
+    v.srcObject = stream;
+    if (!stream) return;
+    let retry: (() => void) | null = null;
+    v.play().then(
+      () => onBlocked?.(false),
+      (err: unknown) => {
+        // Phones can refuse to play sound until the person touches the page. Start it on their next tap.
+        if (!(err instanceof DOMException) || err.name !== "NotAllowedError") return;
+        onBlocked?.(true);
+        retry = () => void v.play().then(() => onBlocked?.(false), () => {});
+        document.addEventListener("pointerdown", retry, { once: true });
+      },
+    );
+    return () => {
+      if (retry) document.removeEventListener("pointerdown", retry);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only restart playback when the stream itself changes
   }, [stream]);
   useEffect(() => {
     const v = el.current as (HTMLVideoElement & { setSinkId?: (id: string) => Promise<void> }) | null;
@@ -52,7 +70,10 @@ export const Video = forwardRef<HTMLVideoElement, VideoProps>(function Video({ s
       style={style}
       onLoadedMetadata={report}
       onResize={report}
-      onPlaying={report}
+      onPlaying={() => {
+        report();
+        onBlocked?.(false);
+      }}
       onPause={resume}
       onEmptied={() => onPicture?.(false)}
       className={`${className} ${mirror ? "-scale-x-100" : ""}`}

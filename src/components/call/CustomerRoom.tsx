@@ -30,6 +30,7 @@ export function CustomerRoom({ token, business, firstName, iceServers }: { token
   const [hintClosed, setHintClosed] = useState(false);
   const [locating, setLocating] = useState(false);
   const [tileLeft, setTileLeft] = useState(false);
+  const [soundBlocked, setSoundBlocked] = useState(false);
   const [pointing, setPointing] = useState(false);
   const [locError, setLocError] = useState("");
 
@@ -144,9 +145,14 @@ export function CustomerRoom({ token, business, firstName, iceServers }: { token
         onClick={!showingScreen && repShown ? () => setTileLeft(!tileLeft) : undefined}
         title={!showingScreen && repShown ? "Tap to move" : undefined}
       >
-        <Video stream={call.remote} onPicture={setRepPicture} className={`h-full w-full ${showingScreen ? "object-contain" : "object-cover"}`} />
+        <Video stream={call.remote} onPicture={setRepPicture} onBlocked={setSoundBlocked} className={`h-full w-full ${showingScreen ? "object-contain" : "object-cover"}`} />
       </div>
 
+      {soundBlocked && call.status === "connected" && (
+        <button type="button" className="absolute inset-x-4 top-16 z-30 mx-auto max-w-sm rounded-2xl bg-brand px-4 py-4 text-center text-base font-bold text-black shadow-xl landscape:top-10" onClick={() => setSoundBlocked(false)}>
+          Tap here to turn on sound
+        </button>
+      )}
       <p role="status" className="pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 to-transparent px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-6 text-center text-sm font-semibold landscape:pb-3 landscape:text-xs">
         {showingScreen
           ? `${business} is showing you their screen`
