@@ -2,11 +2,22 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 
-export type CallStatus = "idle" | "starting" | "waiting" | "connecting" | "connected" | "ended" | "error";
+/** "taken" = a teammate took this call over on another screen. */
+export type CallStatus = "idle" | "starting" | "waiting" | "connecting" | "connected" | "ended" | "error" | "taken";
 type Role = "rep" | "customer";
 type Facing = "environment" | "user";
-type Signal = { id: number; kind: "ready" | "offer" | "answer" | "ice" | "bye"; payload: { sid?: string; sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit } | null };
-type Options = { role: Role; signalUrl: string; iceServers: RTCIceServer[] };
+export type Signal = {
+  id: number;
+  /** Who sent it. "watch" = a view-only teammate asking the host for the picture. */
+  from?: string;
+  kind: "ready" | "offer" | "answer" | "ice" | "bye";
+  /** wid = which view-only screen the message is about. */
+  payload: { sid?: string; sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit; wid?: string; name?: string } | null;
+};
+/** hostUrl and clientId are for your side only: they decide which of your screens runs the call. */
+type Options = { role: Role; signalUrl: string; iceServers: RTCIceServer[]; hostUrl?: string; clientId?: string };
+/** A teammate watching the call, view only. The host passes the customer's picture and sound along to them. */
+type Watcher = { pc: RTCPeerConnection; sid: string; name: string; ice: RTCIceCandidateInit[]; since: number };
 export type Device = { id: string; label: string };
 export type Shared = { lat: number; lng: number; accuracy: number };
 /** Small messages sent directly between the two browsers during a call. */
@@ -59,12 +70,16 @@ export type CallState = {
   snapAsked: number;
   /** Customer: phone flashlight available / on. */
   torch: "unsupported" | "off" | "on";
+  /** Rep: teammates watching this call right now (view only). */
+  watchers: string[];
+  /** Rep: who took the call over, when status is "taken". */
+  takenBy: string;
 };
 
 const initial = (role: Role): CallState => ({
   status: "idle", error: "", local: null, remote: null, muted: false, cameraOff: false, facing: role === "customer" ? "environment" : "user",
   hasCamera: false, hasMic: false, cameraProblem: "", sharing: false, remotePaused: false, repVideo: false, mics: [], cameras: [], speakers: [], micId: "", cameraId: "", speakerId: "",
-  pointer: null, locationAsked: false, location: null, remoteZoom: null, snapAsked: 0, torch: "unsupported",
+  pointer: null, locationAsked: false, location: null, remoteZoom: null, snapAsked: 0, torch: "unsupported", watchers: [], takenBy: "",
 });
 
 /**
@@ -90,6 +105,8 @@ class CallEngine {
   private cursor = 0;
   private pendingIce: RTCIceCandidateInit[] = [];
   private alive = false;
+  private watchers = new Map<string, Watcher>();
+  private hostName = "";
 
   constructor(private opts: Options) {
     this.state = initial(opts.role);
@@ -105,8 +122,117 @@ class CallEngine {
     this.listeners.forEach((fn) => fn());
   }
 
-  private send(kind: Signal["kind"], payload?: Signal["payload"]) {
-    return fetch(this.opts.signalUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, payload }), keepalive: kind === "bye" }).catch(() => undefined);
+  /** ch "relay" = from the host to a view-only teammate, not to the customer. */
+  private send(kind: Signal["kind"], payload?: Signal["payload"], ch?: "relay") {
+    return fetch(this.opts.signalUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, payload, client: this.opts.clientId, ch }), keepalive: kind === "bye" }).catch(() => undefined);
+  }
+
+  /** Address for reading setup messages. Your side says which screen is asking. */
+  private readUrl(query: string) {
+    return `${this.opts.signalUrl}?${query}${this.opts.clientId ? `&client=${this.opts.clientId}` : ""}`;
+  }
+
+  /** Rep: ask to be, or stop being, the one screen that runs this call. */
+  private async host(action: "claim" | "takeover" | "release", name = ""): Promise<{ mine: boolean; name: string }> {
+    if (!this.opts.hostUrl) return { mine: true, name: "" };
+    try {
+      const res = await fetch(this.opts.hostUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client: this.opts.clientId, name, action }), keepalive: action === "release" });
+      return res.ok ? await res.json() : { mine: false, name: "" };
+    } catch {
+      return { mine: false, name: "" };
+    }
+  }
+
+  // ---- View-only teammates. The host forwards what it receives from the customer, plus its own voice. ----
+
+  private publishWatchers() {
+    this.set({ watchers: [...this.watchers.values()].filter((w) => w.pc.connectionState === "connected").map((w) => w.name || "A teammate") });
+  }
+
+  private dropWatcher(wid: string) {
+    const w = this.watchers.get(wid);
+    if (!w) return;
+    this.watchers.delete(wid);
+    w.pc.onconnectionstatechange = null;
+    w.pc.close();
+    this.publishWatchers();
+  }
+
+  /** Point a watcher's three outgoing lines at whatever is live right now: customer picture, customer sound, your microphone. */
+  private async feedWatcher(w: Watcher) {
+    const [video, theirSound, mySound] = w.pc.getTransceivers().map((t) => t.sender);
+    const fromCustomer = this.pc?.getReceivers().map((r) => r.track).filter((t) => t.readyState === "live") ?? [];
+    const set = (sender: RTCRtpSender | undefined, track: MediaStreamTrack | null) => (sender && sender.track !== track ? sender.replaceTrack(track).catch(() => undefined) : undefined);
+    await Promise.all([
+      set(video, fromCustomer.find((t) => t.kind === "video") ?? null),
+      set(theirSound, fromCustomer.find((t) => t.kind === "audio") ?? null),
+      set(mySound, this.stream?.getAudioTracks()[0] ?? null),
+    ]);
+  }
+
+  private feedWatchers() {
+    this.watchers.forEach((w) => void this.feedWatcher(w));
+  }
+
+  private async offerWatcher(wid: string, name: string) {
+    const existing = this.watchers.get(wid);
+    // A repeat request while the first is still being set up: let it finish.
+    if (existing && existing.pc.connectionState !== "failed" && Date.now() - existing.since < 15_000) return;
+    this.dropWatcher(wid);
+    if (this.watchers.size >= 4) return;
+    const pc = new RTCPeerConnection({ iceServers: this.opts.iceServers });
+    const w: Watcher = { pc, sid: crypto.randomUUID(), name, ice: [], since: Date.now() };
+    this.watchers.set(wid, w);
+    pc.addTransceiver("video", { direction: "sendonly" });
+    pc.addTransceiver("audio", { direction: "sendonly" });
+    pc.addTransceiver("audio", { direction: "sendonly" });
+    await this.feedWatcher(w);
+    pc.onicecandidate = (e) => {
+      if (e.candidate) void this.send("ice", { wid, sid: w.sid, candidate: e.candidate.toJSON() }, "relay");
+    };
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "failed" || pc.connectionState === "closed") this.dropWatcher(wid);
+      else this.publishWatchers();
+    };
+    const sdp = await pc.createOffer();
+    await pc.setLocalDescription(sdp);
+    await this.send("offer", { wid, sid: w.sid, sdp }, "relay");
+  }
+
+  private async handleWatch(m: Signal) {
+    const body = m.payload ?? {};
+    const wid = body.wid;
+    if (typeof wid !== "string" || !/^[0-9a-f-]{36}$/.test(wid)) return;
+    if (m.kind === "ready") return this.offerWatcher(wid, String(body.name ?? "").slice(0, 40));
+    if (m.kind === "bye") return this.dropWatcher(wid);
+    const w = this.watchers.get(wid);
+    if (!w || body.sid !== w.sid) return;
+    if (m.kind === "answer" && body.sdp && !w.pc.remoteDescription) await w.pc.setRemoteDescription(body.sdp);
+    else if (m.kind === "ice" && body.candidate) w.ice.push(body.candidate);
+    if (w.pc.remoteDescription) for (const c of w.ice.splice(0)) await w.pc.addIceCandidate(c).catch(() => undefined);
+  }
+
+  private closeWatchers(tell: boolean) {
+    if (tell && this.watchers.size) void this.send("bye", { wid: "*" }, "relay");
+    [...this.watchers.keys()].forEach((wid) => this.dropWatcher(wid));
+  }
+
+  /** Rep: a teammate took the call over on another screen. Let go without disturbing the customer. */
+  private lostHost(name: string) {
+    this.alive = false;
+    this.closePeer();
+    this.closeWatchers(false);
+    this.releaseDevices();
+    this.set({ status: "taken", takenBy: name || "A teammate", local: null, sharing: false });
+  }
+
+  private releaseDevices() {
+    this.screen?.stop();
+    this.screen = null;
+    this.stream?.getTracks().forEach((t) => t.stop());
+    this.stream = null;
+    navigator.mediaDevices.removeEventListener?.("devicechange", this.refreshDevices);
+    document.removeEventListener("visibilitychange", this.onVisible);
   }
 
   private control(msg: Control) {
@@ -226,6 +352,7 @@ class CallEngine {
     this.dc = null;
     this.pendingIce = [];
     this.set({ remote: null, pointer: null, remoteZoom: null, remotePaused: false });
+    this.feedWatchers();
   }
 
   /** The outgoing sender for sound or picture, whether or not it has a track yet. */
@@ -261,6 +388,7 @@ class CallEngine {
     p.ontrack = (e) => {
       if (this.pc !== p) return;
       this.set({ remote: new MediaStream(p.getReceivers().map((r) => r.track).filter((t) => t.readyState === "live")) });
+      this.feedWatchers();
       if (e.track.kind === "video") {
         // A phone pauses its camera when the browser is put in the background or another app takes over.
         const report = () => {
@@ -300,6 +428,10 @@ class CallEngine {
   private async handle(m: Signal) {
     const body = m.payload ?? {};
     const { role } = this.opts;
+    if (m.from === "watch") {
+      if (role === "rep") await this.handleWatch(m);
+      return;
+    }
     if (m.kind === "bye") {
       this.closePeer();
       this.set({ status: "waiting", sharing: role === "rep" ? this.state.sharing : false, repVideo: false, locationAsked: false });
@@ -334,9 +466,14 @@ class CallEngine {
   private poll = async () => {
     if (!this.alive) return;
     try {
-      const res = await fetch(`${this.opts.signalUrl}?after=${this.cursor}`);
+      const res = await fetch(this.readUrl(`after=${this.cursor}`));
       if (res.ok) {
-        const data: { cursor: number; messages: Signal[] } = await res.json();
+        const data: { cursor: number; messages: Signal[]; host?: boolean; hostName?: string } = await res.json();
+        if (data.host === false) {
+          // Somebody else is hosting now. (If nobody is, this screen was only slow to check in: carry on as host.)
+          if (data.hostName || !(await this.host("claim", this.hostName)).mine) return this.lostHost(data.hostName ?? "");
+          return void setTimeout(this.poll, 1000);
+        }
         this.cursor = data.cursor;
         for (const m of data.messages) await this.handle(m).catch(() => undefined);
       }
@@ -344,7 +481,8 @@ class CallEngine {
       /* network blip: try again on the next tick */
     }
     // Check often while connecting, less often once the call is up.
-    if (this.alive) setTimeout(this.poll, this.state.status === "connected" ? 3000 : 1000);
+    const settled = this.state.status === "connected" && [...this.watchers.values()].every((w) => w.pc.connectionState === "connected");
+    if (this.alive) setTimeout(this.poll, settled ? 3000 : 1000);
   };
 
   /** Lists microphones, cameras and speakers. Names only appear once permission has been given. */
@@ -367,9 +505,9 @@ class CallEngine {
   };
 
   /** Must be called from a button press so the browser allows camera, microphone and sound. */
-  start = async () => {
+  start = async (as: { name?: string; takeOver?: boolean } = {}) => {
     if (this.alive) return;
-    this.set({ status: "starting", error: "" });
+    this.set({ status: "starting", error: "", takenBy: "" });
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("unsupported");
       const video = { facingMode: { ideal: this.state.facing }, width: { ideal: 1920 }, height: { ideal: 1080 } };
@@ -397,7 +535,15 @@ class CallEngine {
       navigator.mediaDevices.addEventListener?.("devicechange", this.refreshDevices);
       // Coming back to the page after switching apps: restart the camera if the phone stopped it.
       document.addEventListener("visibilitychange", this.onVisible);
-      const init = await fetch(`${this.opts.signalUrl}?init=1`).then((r) => (r.ok ? r.json() : Promise.reject(new Error("signal"))));
+      if (this.opts.role === "rep") {
+        this.hostName = as.name ?? "";
+        const host = await this.host(as.takeOver ? "takeover" : "claim", this.hostName);
+        if (!host.mine) {
+          this.releaseDevices();
+          return this.set({ status: "idle", local: null, error: `${host.name || "A teammate"} is already running this call. You can watch, or take it over.` });
+        }
+      }
+      const init = await fetch(this.readUrl("init=1")).then((r) => (r.ok ? r.json() : Promise.reject(new Error("signal"))));
       this.cursor = init.cursor;
       this.alive = true;
       this.set({ status: "waiting" });
@@ -431,14 +577,10 @@ class CallEngine {
   hangUp = () => {
     if (!this.alive) return;
     this.alive = false;
-    void this.send("bye");
+    this.closeWatchers(true);
+    void this.send("bye").then(() => (this.opts.role === "rep" ? this.host("release") : undefined));
     this.closePeer();
-    this.screen?.stop();
-    this.screen = null;
-    this.stream?.getTracks().forEach((t) => t.stop());
-    this.stream = null;
-    navigator.mediaDevices.removeEventListener?.("devicechange", this.refreshDevices);
-    document.removeEventListener("visibilitychange", this.onVisible);
+    this.releaseDevices();
     this.set({ status: "ended", local: null, sharing: false, locationAsked: false });
   };
 
@@ -466,6 +608,7 @@ class CallEngine {
     this.stream ??= new MediaStream();
     this.stream.addTrack(track);
     this.set({ local: new MediaStream(this.stream.getTracks()) });
+    this.feedWatchers();
   }
 
   /** Switch between the back and front camera without dropping the call. */
@@ -601,8 +744,13 @@ class CallEngine {
 
   /** Called when the page is left. */
   dispose = () => {
-    if (this.alive) void this.send("bye");
+    if (this.alive) {
+      this.closeWatchers(true);
+      void this.send("bye");
+      if (this.opts.role === "rep") void this.host("release");
+    }
     this.alive = false;
+    this.watchers.forEach((w) => w.pc.close());
     this.pc?.close();
     this.screen?.stop();
     this.stream?.getTracks().forEach((t) => t.stop());

@@ -73,6 +73,8 @@ export async function saveSettings(fd: FormData) {
       abEnabled: fd.get("abEnabled") === "on",
       heroHeadlineB: str(fd, "heroHeadlineB", 160),
       heroSubB: str(fd, "heroSubB", 300),
+      callNeeded: str(fd, "callNeeded", 3000),
+      callRecommended: str(fd, "callRecommended", 3000),
     })
     .where(eq(schema.settings.id, 1));
   revalidatePath("/", "layout");

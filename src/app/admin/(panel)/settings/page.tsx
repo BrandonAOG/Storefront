@@ -45,6 +45,17 @@ export default async function SettingsAdmin({ searchParams }: { searchParams: Pr
           <input className="input" name="heroSubB" maxLength={300} defaultValue={s.heroSubB} />
           <span className="mt-1 block text-xs text-slate-500">Results appear in Analytics. The test only runs while the box is ticked and headline B is filled in.</span>
         </label>
+        <h2 className="mt-2 border-t border-slate-200 pt-4 font-bold sm:col-span-2">Video call checklist</h2>
+        <p className="-mt-2 text-sm text-slate-600 sm:col-span-2">Customers see this on their visit page above the Join button, and in the &quot;call scheduled&quot; and reminder emails. One item per line. Nothing here stops a customer from joining.</p>
+        <label className="sm:col-span-2">
+          <span className="label">Please have ready</span>
+          <textarea className="input" name="callNeeded" rows={5} maxLength={3000} defaultValue={s.callNeeded} />
+        </label>
+        <label className="sm:col-span-2">
+          <span className="label">Helpful if you have them (not required)</span>
+          <textarea className="input" name="callRecommended" rows={7} maxLength={3000} defaultValue={s.callRecommended} />
+          <span className="mt-1 block text-xs text-slate-500">Leave a box empty to hide that list.</span>
+        </label>
         <button className="btn btn-dark sm:col-span-2">Save settings</button>
       </form>
     </>

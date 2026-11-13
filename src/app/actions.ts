@@ -233,8 +233,10 @@ const MAX_MEDIA = 10;
 const mediaSchema = z.object({
   url: z.string().url().max(600),
   name: z.string().max(200).default(""),
-  contentType: z.string().max(100).regex(/^(image|video)\//),
+  contentType: z.string().max(100).regex(/^((image|video)\/|application\/pdf$)/),
   size: z.number().int().min(1).max(250 * 1024 * 1024),
+  /** True for a property survey or site plan, so it is labelled as one for the estimator. */
+  survey: z.boolean().optional(),
 });
 
 /** Record a file the customer just uploaded for their virtual visit. */
@@ -250,7 +252,8 @@ export async function attachVisitMedia(token: unknown, input: unknown): Promise<
   if (!v) return { ok: false, error: "Invalid link." };
   const [{ n }] = await db().select({ n: sql<number>`count(*)::int` }).from(schema.visitMedia).where(eq(schema.visitMedia.visitId, v.id));
   if (n >= MAX_MEDIA) return { ok: false, error: `You can add up to ${MAX_MEDIA} files.` };
-  await db().insert(schema.visitMedia).values({ visitId: v.id, ...parsed.data });
+  const { survey, ...file } = parsed.data;
+  await db().insert(schema.visitMedia).values({ visitId: v.id, ...file, kind: survey ? "survey" : "upload" });
   return { ok: true };
 }
 

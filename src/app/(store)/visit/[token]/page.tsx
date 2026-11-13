@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { MediaUploader } from "@/components/MediaUploader";
+import { callChecklist } from "@/lib/checklist";
 import { fmtAppointment } from "@/lib/format";
 import { getSettings } from "@/lib/settings";
 
@@ -19,6 +20,8 @@ export default async function VisitStatus({ params }: { params: Promise<{ token:
   ]);
   const uploads = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
   const open = v.status === "new" || v.status === "scheduled";
+  const list = callChecklist(s);
+  const surveys = media.filter((m) => m.kind === "survey");
   return (
     <div className="mx-auto max-w-2xl px-4 py-12">
       <div className="card">
@@ -31,15 +34,31 @@ export default async function VisitStatus({ params }: { params: Promise<{ token:
         {open && v.scheduledAt && (
           <p className="mt-4 rounded-xl bg-cream p-4 font-display font-bold">Your video call is {fmtAppointment(v.scheduledAt)} (Eastern time).</p>
         )}
-        {open && (
+        {open && (list.needed.length + list.recommended.length > 0 || uploads) && (
           <div className="mt-4 rounded-xl border border-slate-200 p-4 text-sm">
-            <p className="font-semibold">Before your call, please have ready:</p>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-700">
-              <li>A sheet of printer paper and some tape. We&apos;ll ask you to tape it flat where we need to measure.</li>
-              <li>A tape measure or ruler, if you have one.</li>
-              <li>A charged phone. A video call uses more battery than normal, so start above 30% or keep a charger nearby.</li>
-              <li>A clear path to your electrical panel, your gas or propane meter, and where the generator would go.</li>
-            </ul>
+            <h2 className="font-display text-base font-bold">Before your call</h2>
+            {list.needed.length > 0 && (
+              <>
+                <p className="mt-2 font-semibold">Please have ready:</p>
+                <ul className="mt-1 list-disc space-y-1 pl-5 text-slate-700">{list.needed.map((item) => <li key={item}>{item}</li>)}</ul>
+              </>
+            )}
+            {list.recommended.length > 0 && (
+              <>
+                <p className="mt-3 font-semibold">Helpful if you have them <span className="font-normal text-slate-500">(not required)</span>:</p>
+                <ul className="mt-1 list-disc space-y-1 pl-5 text-slate-700">{list.recommended.map((item) => <li key={item}>{item}</li>)}</ul>
+              </>
+            )}
+            {uploads && (
+              <div className="mt-4 border-t border-slate-200 pt-4 first:mt-0 first:border-0 first:pt-0">
+                <p className="font-semibold">Have a property survey or site plan?</p>
+                <p className="mt-1 text-slate-600">Add it now and we&apos;ll look it over before the call. It shows your property lines and where the house sits, which decides where a generator can go.</p>
+                {surveys.length > 0 && (
+                  <ul className="mt-2 space-y-1">{surveys.map((m) => <li key={m.id} className="flex gap-2"><span className="text-green-600" aria-hidden>✓</span>{m.name || "Survey"} received</li>)}</ul>
+                )}
+                <div className="mt-3"><MediaUploader token={token} remaining={10 - media.length} survey /></div>
+              </div>
+            )}
           </div>
         )}
         {open && (

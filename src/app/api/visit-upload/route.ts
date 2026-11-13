@@ -24,7 +24,7 @@ export async function POST(req: Request) {
         const [v] = await db().select({ id: schema.visits.id }).from(schema.visits).where(eq(schema.visits.token, clientPayload));
         if (!v) throw new Error("Invalid link");
         return {
-          allowedContentTypes: ["image/jpeg", "image/png", "image/webp", "image/heic", "video/mp4", "video/quicktime", "video/webm"],
+          allowedContentTypes: ["image/jpeg", "image/png", "image/webp", "image/heic", "video/mp4", "video/quicktime", "video/webm", "application/pdf"],
           maximumSizeInBytes: 250 * 1024 * 1024,
           addRandomSuffix: true, // makes the file address unguessable
         };

@@ -1,3 +1,4 @@
+import { callChecklistText } from "./checklist";
 import "server-only";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
@@ -60,7 +61,7 @@ export const visitScheduled = (visitId: string) =>
     if (!v?.scheduledAt || !v.token) return;
     const [settings, customer] = await Promise.all([getSettings(), customerById(v.customerId)]);
     // refId includes the time, so changing the time sends a fresh message.
-    if (customer) await sendAutomation({ key: "visit_scheduled", refId: `${v.id}:${v.scheduledAt.getTime()}`, customer, settings, vars: { when: fmtAppointment(v.scheduledAt), link: `${appUrl()}/visit/${v.token}` } });
+    if (customer) await sendAutomation({ key: "visit_scheduled", refId: `${v.id}:${v.scheduledAt.getTime()}`, customer, settings, vars: { checklist: callChecklistText(settings), when: fmtAppointment(v.scheduledAt), link: `${appUrl()}/visit/${v.token}` } });
   });
 
 export const membershipChanged = (id: string, event: "membership.created" | "membership.active" | "membership.cancelled") =>

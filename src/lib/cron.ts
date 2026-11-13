@@ -1,3 +1,4 @@
+import { callChecklistText } from "./checklist";
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { and, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
@@ -50,7 +51,7 @@ export async function runDailyJobs() {
       .where(and(eq(v.status, "scheduled"), isNotNull(v.scheduledAt), isNotNull(v.token), sql`(${v.scheduledAt} at time zone ${TIME_ZONE})::date = (now() at time zone ${TIME_ZONE})::date`, sql`${v.scheduledAt} > now()`));
     for (const r of rows) {
       const time = r.visit.scheduledAt!.toLocaleTimeString("en-US", { timeZone: TIME_ZONE, hour: "numeric", minute: "2-digit" });
-      await sendAutomation({ key: a.key, refId: `${r.visit.id}:${r.visit.scheduledAt!.getTime()}`, customer: r.customer, settings, vars: { time, link: `${base}/visit/${r.visit.token}` } });
+      await sendAutomation({ key: a.key, refId: `${r.visit.id}:${r.visit.scheduledAt!.getTime()}`, customer: r.customer, settings, vars: { checklist: callChecklistText(settings), time, link: `${base}/visit/${r.visit.token}` } });
     }
     done.visitReminders = rows.length;
   }

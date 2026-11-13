@@ -39,6 +39,10 @@ export const settings = pgTable("settings", {
   abEnabled: boolean("ab_enabled").notNull().default(false),
   heroHeadlineB: text("hero_headline_b").notNull().default(""),
   heroSubB: text("hero_sub_b").notNull().default(""),
+  /** What customers should have ready for a video call. One item per line. Shown on their visit page and in call emails. */
+  callNeeded: text("call_needed").notNull().default("A charged phone, or a charger nearby. Video uses more battery than normal.\nGood signal or Wi-Fi where your equipment is. Garages and the side of the house are often weak spots.\nA clear path to your electrical panel, your gas or propane meter, and where the generator would go. Unlock any gates."),
+  /** Helpful but optional items. One per line. */
+  callRecommended: text("call_recommended").notNull().default("A tape measure.\nA sheet of printer paper and some tape. We'll ask you to tape it flat where we need to measure.\nYour property survey or site plan, if you have one. You can add a photo of it on your visit page before the call.\nA flashlight, if your electrical panel is in a dark spot.\nA second person to hold the phone, if that's easier.\nKnow whether you have natural gas or propane, and where the meter or tank is."),
 });
 
 export const customers = pgTable("customers", {
@@ -204,6 +208,10 @@ export const visits = pgTable("visits", {
   locAccuracy: integer("loc_accuracy"),
   locAt: timestamp("loc_at", { withTimezone: true }),
   repSeenAt: timestamp("rep_seen_at", { withTimezone: true }),
+  /** Which open call-room screen is running the call right now (one at a time), who that is, and when it last checked in. */
+  hostId: text("host_id"),
+  hostName: text("host_name"),
+  hostSeenAt: timestamp("host_seen_at", { withTimezone: true }),
   customerId: uuid("customer_id"),
   ...attribution,
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -232,7 +240,7 @@ export const visitSignals = pgTable(
   {
     id: bigserial("id", { mode: "number" }).primaryKey(),
     visitId: uuid("visit_id").notNull().references(() => visits.id, { onDelete: "cascade" }),
-    /** rep | customer */
+    /** rep (the host) | customer | watch (a view-only teammate, to the host) | relay (the host, to a view-only teammate) */
     fromRole: text("from_role").notNull(),
     /** ready | offer | answer | ice | bye */
     kind: text("kind").notNull(),

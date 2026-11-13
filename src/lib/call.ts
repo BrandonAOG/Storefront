@@ -1,9 +1,15 @@
 import "server-only";
-import { and, desc, eq, gt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/db";
 
 export type Role = "rep" | "customer";
+/**
+ * Who a setup message is from. "rep" is the host talking to the customer.
+ * "watch" and "relay" are a second, separate conversation between a view-only
+ * teammate and the host; the customer never sees those.
+ */
+export type Sender = Role | "watch" | "relay";
 
 export const signalBody = z.object({
   kind: z.enum(["ready", "offer", "answer", "ice", "bye"]),
@@ -11,7 +17,7 @@ export const signalBody = z.object({
 });
 
 /** Store one signaling message. Messages are small; anything large is refused. */
-export async function postSignal(visitId: string, from: Role, body: unknown): Promise<boolean> {
+export async function postSignal(visitId: string, from: Sender, body: unknown): Promise<boolean> {
   const parsed = signalBody.safeParse(body);
   if (!parsed.success) return false;
   const payload = parsed.data.payload ?? null;
@@ -21,23 +27,58 @@ export async function postSignal(visitId: string, from: Role, body: unknown): Pr
 }
 
 /**
- * Messages from the other side, newer than `after`. With init=true it returns
+ * Messages from the given senders, newer than `after`. With init=true it returns
  * no messages, only the current position, so a page that just opened ignores
  * anything left over from an earlier call.
  */
-export async function readSignals(visitId: string, me: Role, after: number, init: boolean) {
+export async function readSignals(visitId: string, from: Sender[], after: number, init: boolean) {
   const t = schema.visitSignals;
   if (init) {
     const [last] = await db().select({ id: t.id }).from(t).where(eq(t.visitId, visitId)).orderBy(desc(t.id)).limit(1);
     return { cursor: last?.id ?? 0, messages: [] };
   }
   const rows = await db()
-    .select({ id: t.id, kind: t.kind, payload: t.payload })
+    .select({ id: t.id, from: t.fromRole, kind: t.kind, payload: t.payload })
     .from(t)
-    .where(and(eq(t.visitId, visitId), ne(t.fromRole, me), gt(t.id, after)))
+    .where(and(eq(t.visitId, visitId), inArray(t.fromRole, from), gt(t.id, after)))
     .orderBy(t.id)
     .limit(100);
   return { cursor: rows.length ? rows[rows.length - 1].id : after, messages: rows };
+}
+
+/**
+ * Only one screen on your side runs a call at a time: the host. A host that
+ * stops checking in (closed tab, lost connection) is forgotten after 15 seconds.
+ */
+const HOST_LIVE = sql`${schema.visits.hostSeenAt} > now() - interval '15 seconds'`;
+export const clientId = z.string().regex(/^[0-9a-f-]{36}$/);
+export const personName = z.string().trim().max(40);
+
+/** Who is hosting right now, and whether that is the screen asking. */
+export async function hostState(visitId: string, client: string) {
+  const v = schema.visits;
+  const [row] = await db().select({ id: v.hostId, name: v.hostName, live: sql<boolean>`coalesce(${HOST_LIVE}, false)` }).from(v).where(eq(v.id, visitId));
+  const live = Boolean(row?.id && row.live);
+  return { live, mine: live && row!.id === client, name: live ? row!.name || "Someone else" : "" };
+}
+
+/** Become the host. Without `force` this only works when nobody else is hosting. */
+export async function claimHost(visitId: string, client: string, name: string, force: boolean): Promise<boolean> {
+  const v = schema.visits;
+  const free = force ? sql`true` : sql`(${v.hostId} is null or ${v.hostId} = ${client} or ${v.hostSeenAt} is null or not (${HOST_LIVE}))`;
+  const rows = await db().update(v).set({ hostId: client, hostName: name, hostSeenAt: new Date() }).where(and(eq(v.id, visitId), free)).returning({ id: v.id });
+  return rows.length > 0;
+}
+
+export async function releaseHost(visitId: string, client: string) {
+  const v = schema.visits;
+  await db().update(v).set({ hostId: null, hostName: null, hostSeenAt: null }).where(and(eq(v.id, visitId), eq(v.hostId, client)));
+}
+
+/** The host checking in. Written at most every 4 seconds. */
+export async function hostBeat(visitId: string, client: string) {
+  const v = schema.visits;
+  await db().update(v).set({ hostSeenAt: new Date() }).where(and(eq(v.id, visitId), eq(v.hostId, client), sql`${v.hostSeenAt} < now() - interval '4 seconds'`));
 }
 
 /**

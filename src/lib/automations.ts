@@ -38,13 +38,13 @@ export const AUTOMATIONS: AutomationDef[] = [
   {
     key: "visit_scheduled", label: "Video call scheduled", when: "When you set or change a video call time", delayLabel: null, marketing: false, delayDays: 0,
     subject: "Your video call is {{when}}",
-    body: "Hi {{name}},\n\nYour video call with {{business}} is scheduled for {{when}}.\n\nAt that time, open this page on your phone and tap Join video call:\n{{link}}\n\nBefore the call, please have ready:\n- A sheet of printer paper and some tape (we use it to measure from the video)\n- A tape measure or ruler, if you have one\n- A charged phone (video uses more battery than normal)\n\nNeed a different time? Call {{phone}}.",
+    body: "Hi {{name}},\n\nYour video call with {{business}} is scheduled for {{when}}.\n\nAt that time, open this page on your phone and tap Join video call:\n{{link}}\n\n{{checklist}}\n\nNeed a different time? Call {{phone}}.",
     sms: "{{business}}: your video call is {{when}}. Join here at that time: {{link}}",
   },
   {
     key: "visit_reminder", label: "Video call reminder", when: "The morning of the video call", delayLabel: null, marketing: false, delayDays: 0,
     subject: "Reminder: your video call is today at {{time}}",
-    body: "Hi {{name}},\n\nA reminder that your video call with {{business}} is today at {{time}}.\n\nOpen this page on your phone and tap Join video call:\n{{link}}\n\nPlease have a sheet of printer paper, some tape and a tape measure or ruler handy.",
+    body: "Hi {{name}},\n\nA reminder that your video call with {{business}} is today at {{time}}.\n\nOpen this page on your phone and tap Join video call:\n{{link}}\n\n{{checklist}}",
     sms: "{{business}}: your video call is today at {{time}}. Join here: {{link}}",
   },
   {

@@ -88,6 +88,7 @@ export const statusText: Record<string, string> = {
   connecting: "Connecting…",
   connected: "Connected",
   ended: "Call ended",
+  taken: "Taken over",
   error: "",
 };
 

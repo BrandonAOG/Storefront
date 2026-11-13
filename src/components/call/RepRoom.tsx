@@ -8,6 +8,7 @@ import { MicMeter } from "./MicMeter";
 import { Icon } from "./Icons";
 import { CallButton, frameFromClick, frameToBox, PointerMark, statusText, Video } from "./Video";
 import { useCall, type Device, type Shared } from "./useCall";
+import { useWatch } from "./useWatch";
 
 type Shot = { id: string; url: string; name: string; meta: MeasureMeta | null };
 type Note = { id: string; body: string };
@@ -77,7 +78,14 @@ function TimedPointer({ pointer, video, fit }: { pointer: { x: number; y: number
 
 /** Your side of a virtual visit: the customer's camera, their details, snapshots and notes. */
 export function RepRoom({ visit, iceServers, shots: initialShots, notes: initialNotes, customerLink, addNote, saveMeasure, listShots }: Props) {
-  const call = useCall({ role: "rep", signalUrl: `/admin/call/${visit.id}/signal`, iceServers });
+  // Each open call-room screen has its own id, so two teammates on the same call don't fight over it.
+  const [clientId] = useState(() => crypto.randomUUID());
+  const signalUrl = `/admin/call/${visit.id}/signal`;
+  const hostUrl = `/admin/call/${visit.id}/host`;
+  const call = useCall({ role: "rep", signalUrl, hostUrl, clientId, iceServers });
+  const watch = useWatch({ signalUrl, clientId, iceServers });
+  const [host, setHost] = useState<{ live: boolean; mine: boolean; name: string }>({ live: false, mine: false, name: "" });
+  const nameBox = useRef<HTMLInputElement>(null);
   const [shots, setShots] = useState(initialShots);
   const [notes, setNotes] = useState(initialNotes);
   const [note, setNote] = useState("");
@@ -92,6 +100,7 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
   const [zoom, setZoom] = useState(1);
   const [origin, setOrigin] = useState("50% 50%");
   const remoteVideo = useRef<HTMLVideoElement>(null);
+  const watchName = useRef("");
   const stage = useRef<HTMLDivElement>(null);
   const noteBox = useRef<HTMLTextAreaElement>(null);
 
@@ -103,6 +112,61 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
   }, [connected]);
 
   const live = call.status === "waiting" || call.status === "connecting" || connected;
+  const watching = watch.status !== "idle";
+
+  // Remember the name on this computer, so teammates see who is running or watching a call.
+  useEffect(() => {
+    try {
+      if (nameBox.current && !nameBox.current.value) nameBox.current.value = localStorage.getItem("aog_call_name") ?? "";
+    } catch {
+      /* private window: just type it each time */
+    }
+  }, [live, watching]);
+  const myName = () => {
+    const name = (nameBox.current?.value ?? "").trim().slice(0, 40);
+    try {
+      if (name) localStorage.setItem("aog_call_name", name);
+    } catch {
+      /* not saved */
+    }
+    return name;
+  };
+
+  // Before joining: is a teammate already running this call?
+  useEffect(() => {
+    if (live || watching) return;
+    let stop = false;
+    const check = () =>
+      fetch(`${hostUrl}?client=${clientId}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((h) => {
+          if (h && !stop) setHost(h);
+        })
+        .catch(() => undefined);
+    void check();
+    const t = setInterval(check, 3000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [live, watching, hostUrl, clientId]);
+
+  // While watching, pick up the snapshots the host takes.
+  useEffect(() => {
+    if (!watching) return;
+    const t = setInterval(() => void listShots(visit.id).then(setShots).catch(() => undefined), 5000);
+    return () => clearInterval(t);
+  }, [watching, listShots, visit.id]);
+
+  const startWatching = () => {
+    watchName.current = myName();
+    void watch.start(watchName.current);
+  };
+  const takeOver = () => {
+    const name = myName() || watchName.current;
+    watch.stop();
+    void call.start({ name, takeOver: true });
+  };
   const fit = fill ? "cover" : "contain";
   const location = call.location && typeof call.location === "object" ? call.location : visit.location;
 
@@ -175,24 +239,61 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
         <span className="font-semibold">{visit.name}</span>
         {visit.address && <span className="text-slate-400">{visit.address} {visit.zip}</span>}
         <span className="flex-1" />
-        <span role="status" className="text-slate-300">{connected ? clock(seconds) : statusText[call.status]}</span>
+        <span role="status" className="text-slate-300">{watching ? "Watching, view only" : connected ? clock(seconds) : statusText[call.status]}</span>
         <Link href={`/admin/visits/${visit.id}`} className="underline">Back to visit</Link>
       </header>
 
       <div className="grid flex-1 lg:grid-cols-[1fr_360px]">
         <div className="relative flex min-h-[50vh] min-w-0 flex-col bg-black">
-          {!live ? (
-            <div className="m-auto max-w-md p-6 text-center">
-              <h1 className="text-2xl font-extrabold">{call.status === "ended" ? "Call ended" : "Ready to start"}</h1>
-              <p className="mt-2 text-sm text-slate-300">Send the customer their link, then start the call. They join from their phone&apos;s browser; there is nothing for them to install.</p>
-              <div className="mt-4 rounded-lg bg-white/10 p-3 text-left text-xs">
-                <p className="break-all">{customerLink}</p>
-                <button type="button" className="mt-2 font-bold text-brand underline" onClick={() => { void navigator.clipboard?.writeText(customerLink).then(() => setCopied(true)); }}>{copied ? "Copied" : "Copy customer link"}</button>
+          {watching ? (
+            <>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold">
+                <span className="rounded-full bg-brand px-3 py-1.5 text-black">View only</span>
+                <span role="status" className="font-normal text-slate-300">
+                  {watch.hostLive ? `${watch.hostName} is running this call. The customer can't see or hear you.` : "Nobody is running this call right now."}
+                </span>
+                <span className="flex-1" />
+                <button type="button" className="rounded-full bg-white/10 px-3 py-1.5 hover:bg-white/20" onClick={watch.stop}>Stop watching</button>
+                <button type="button" className="rounded-full bg-brand px-3 py-1.5 text-black hover:brightness-110" onClick={takeOver} title="You become the one talking to the customer. The other screen switches off its camera and microphone.">{watch.hostLive ? "Take over the call" : "Start the call"}</button>
               </div>
+              <div className="relative flex-1 overflow-hidden">
+                <Video stream={watch.remote} onPicture={setHasPicture} className="absolute inset-0 h-full w-full object-contain" />
+                {!hasPicture && (
+                  <p className="pointer-events-none absolute inset-x-0 top-1/3 px-6 text-center text-slate-400">
+                    {!watch.hostLive ? "Waiting for someone to start the call…" : watch.status === "connected" ? "Connected. Waiting for the customer's camera picture…" : `Connecting to ${watch.hostName}'s screen…`}
+                  </p>
+                )}
+              </div>
+            </>
+          ) : !live ? (
+            <div className="m-auto max-w-md p-6 text-center">
+              <h1 className="text-2xl font-extrabold">{host.live && !host.mine ? (call.status === "taken" ? `${host.name} took over this call` : `${host.name} is running this call`) : call.status === "ended" ? "Call ended" : "Ready to start"}</h1>
+              {host.live && !host.mine ? (
+                <p className="mt-2 text-sm text-slate-300">Only one person talks to the customer at a time. You can watch and listen without the customer knowing, or take the call over.</p>
+              ) : (
+                <>
+                  <p className="mt-2 text-sm text-slate-300">Send the customer their link, then start the call. They join from their phone&apos;s browser; there is nothing for them to install.</p>
+                  <div className="mt-4 rounded-lg bg-white/10 p-3 text-left text-xs">
+                    <p className="break-all">{customerLink}</p>
+                    <button type="button" className="mt-2 font-bold text-brand underline" onClick={() => { void navigator.clipboard?.writeText(customerLink).then(() => setCopied(true)); }}>{copied ? "Copied" : "Copy customer link"}</button>
+                  </div>
+                </>
+              )}
+              <label className="mt-4 block text-left text-sm font-semibold">
+                Your name
+                <input ref={nameBox} className="input mt-1" maxLength={40} autoComplete="given-name" placeholder="So teammates know who is on the call" />
+              </label>
               {call.error && <p role="alert" className="mt-4 rounded-lg bg-red-950 p-3 text-sm text-red-200">{call.error}</p>}
-              <button type="button" className="btn btn-primary mt-5 px-8 py-3 text-base" disabled={call.status === "starting"} onClick={() => void call.start()}>
-                {call.status === "starting" ? "Starting camera…" : call.status === "ended" ? "Start again" : "Start video call"}
-              </button>
+              {host.live && !host.mine ? (
+                <div className="mt-5 flex flex-wrap justify-center gap-3">
+                  <button type="button" className="btn btn-primary px-6 py-3 text-base" onClick={startWatching}>Watch (view only)</button>
+                  <button type="button" className="btn border border-white/40 px-6 py-3 text-base text-white" disabled={call.status === "starting"} onClick={takeOver}>{call.status === "starting" ? "Starting camera…" : "Take over the call"}</button>
+                </div>
+              ) : (
+                <button type="button" className="btn btn-primary mt-5 px-8 py-3 text-base" disabled={call.status === "starting"} onClick={() => void call.start({ name: myName() })}>
+                  {call.status === "starting" ? "Starting camera…" : call.status === "ended" ? "Start again" : "Start video call"}
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -211,6 +312,7 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
                   </label>
                 )}
                 <button type="button" className="rounded-full bg-white/10 px-3 py-1.5 hover:bg-white/20 disabled:opacity-40" disabled={call.status === "waiting"} onClick={call.reconnect} title="Use this if the picture freezes or goes missing. The call carries on.">Reconnect picture</button>
+                {call.watchers.length > 0 && <span className="rounded-full bg-brand px-3 py-1.5 text-black" title="They can see and hear the call but the customer can't see or hear them.">Watching: {call.watchers.join(", ")}</span>}
                 <span role="status" className="ml-auto font-normal text-slate-300">{call.error || flash || (connected && !call.remoteZoom ? "For fine print, have them move closer and press Snapshot." : "")}</span>
               </div>
               <div ref={stage} className="relative flex-1 overflow-hidden" onClick={pointAt}>
@@ -287,6 +389,7 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
                   <MediaActions
                     id={s.id}
                     name={s.name}
+                    url={s.url}
                     dark
                     onRenamed={(name) => setShots((all) => all.map((x) => (x.id === s.id ? { ...x, name } : x)))}
                     onDeleted={() => {

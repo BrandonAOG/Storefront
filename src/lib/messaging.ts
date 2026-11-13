@@ -86,7 +86,9 @@ export async function sendAutomation({ key, refId, customer, settings, vars }: S
     phone: settings.phone,
     ...vars,
   };
-  let body = render(a.body, all);
+  // A call email you reworded before the checklist existed still gets the checklist, at the end.
+  const template = "checklist" in all && all.checklist && !/\{\{\s*checklist\s*\}\}/.test(a.body) ? `${a.body}\n\n{{checklist}}` : a.body;
+  let body = render(template, all).replace(/\n{3,}/g, "\n\n");
   if (a.marketing) {
     body += `\n\n--\n${settings.businessName}${settings.mailingAddress ? `\n${settings.mailingAddress}` : ""}\nUnsubscribe: ${appUrl()}/unsubscribe/${customer.token}`;
   }
