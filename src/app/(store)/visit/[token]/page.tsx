@@ -37,6 +37,7 @@ export default async function VisitStatus({ params }: { params: Promise<{ token:
             <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-700">
               <li>A sheet of printer paper and some tape. We&apos;ll ask you to tape it flat where we need to measure.</li>
               <li>A tape measure or ruler, if you have one.</li>
+              <li>A charged phone. A video call uses more battery than normal, so start above 30% or keep a charger nearby.</li>
               <li>A clear path to your electrical panel, your gas or propane meter, and where the generator would go.</li>
             </ul>
           </div>

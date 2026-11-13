@@ -1,7 +1,7 @@
 "use server";
 
 import { createHash, randomBytes } from "node:crypto";
-import { put } from "@vercel/blob";
+import { del, put } from "@vercel/blob";
 import { and, eq, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -284,6 +284,40 @@ export async function deleteVisitNote(fd: FormData) {
   const visitId = uuid.parse(fd.get("visitId"));
   await db().delete(schema.visitNotes).where(and(eq(schema.visitNotes.id, uuid.parse(fd.get("id"))), eq(schema.visitNotes.visitId, visitId)));
   redirect(`/admin/visits/${visitId}`);
+}
+
+/** Removes stored files (photos, videos, snapshots) from file storage. Never blocks a delete if storage is unreachable. */
+async function removeStoredFiles(urls: string[]) {
+  const stored = urls.filter((u) => /^https:\/\/[a-z0-9]+\.public\.blob\.vercel-storage\.com\//.test(u));
+  if (!stored.length || !process.env.BLOB_READ_WRITE_TOKEN) return;
+  await del(stored).catch((err) => console.error("Could not remove stored files:", err instanceof Error ? err.message : "unknown error"));
+}
+
+/**
+ * Permanently deletes a virtual visit request with its photos, videos,
+ * snapshots, measurements and notes. Estimates made from it are kept.
+ * The form must include the ticked "I understand" box.
+ */
+export async function deleteVisit(fd: FormData) {
+  await requireAdmin();
+  const id = uuid.parse(fd.get("id"));
+  if (fd.get("confirm") !== "on") redirect(`/admin/visits/${id}?error=confirm`);
+  const media = await db().select({ url: schema.visitMedia.url }).from(schema.visitMedia).where(eq(schema.visitMedia.visitId, id));
+  await db().update(schema.quotes).set({ visitId: null }).where(eq(schema.quotes.visitId, id));
+  // Photos, notes and call messages are removed with the visit by the database.
+  await db().delete(schema.visits).where(eq(schema.visits.id, id));
+  await removeStoredFiles(media.map((m) => m.url));
+  redirect("/admin/visits?deleted=1");
+}
+
+/** Permanently deletes a booking and its feedback request. The time slot becomes free again. */
+export async function deleteOrder(fd: FormData) {
+  await requireAdmin();
+  const id = uuid.parse(fd.get("id"));
+  if (fd.get("confirm") !== "on") redirect(`/admin/orders/${id}?error=confirm`);
+  await db().delete(schema.feedback).where(eq(schema.feedback.orderId, id));
+  await db().delete(schema.orders).where(eq(schema.orders.id, id));
+  redirect("/admin/orders?deleted=1");
 }
 
 export async function updateMembership(fd: FormData) {

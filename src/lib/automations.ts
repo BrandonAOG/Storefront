@@ -38,7 +38,7 @@ export const AUTOMATIONS: AutomationDef[] = [
   {
     key: "visit_scheduled", label: "Video call scheduled", when: "When you set or change a video call time", delayLabel: null, marketing: false, delayDays: 0,
     subject: "Your video call is {{when}}",
-    body: "Hi {{name}},\n\nYour video call with {{business}} is scheduled for {{when}}.\n\nAt that time, open this page on your phone and tap Join video call:\n{{link}}\n\nBefore the call, please have ready:\n- A sheet of printer paper and some tape (we use it to measure from the video)\n- A tape measure or ruler, if you have one\n\nNeed a different time? Call {{phone}}.",
+    body: "Hi {{name}},\n\nYour video call with {{business}} is scheduled for {{when}}.\n\nAt that time, open this page on your phone and tap Join video call:\n{{link}}\n\nBefore the call, please have ready:\n- A sheet of printer paper and some tape (we use it to measure from the video)\n- A tape measure or ruler, if you have one\n- A charged phone (video uses more battery than normal)\n\nNeed a different time? Call {{phone}}.",
     sms: "{{business}}: your video call is {{when}}. Join here at that time: {{link}}",
   },
   {

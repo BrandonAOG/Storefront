@@ -8,15 +8,16 @@ import { fmtDateTime, fmtDay, fmtWindow, money } from "@/lib/format";
 export const dynamic = "force-dynamic";
 const FILTERS = ["all", "confirmed", "pending", "completed", "cancelled"];
 
-export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ status?: string; deleted?: string }> }) {
   await requireAdmin();
-  const { status } = await searchParams;
+  const { status, deleted } = await searchParams;
   const filter = FILTERS.includes(status ?? "") ? status! : "all";
   const base = db().select().from(schema.orders);
   const rows = await (filter === "all" ? base : base.where(eq(schema.orders.status, filter))).orderBy(desc(schema.orders.createdAt)).limit(200);
   return (
     <>
       <h1 className="text-2xl font-bold">Bookings</h1>
+      {deleted === "1" && <p role="status" className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">Booking deleted.</p>}
       <div className="mt-3 flex flex-wrap gap-2 text-sm">
         {FILTERS.map((f) => (
           <Link key={f} href={f === "all" ? "/admin/orders" : `/admin/orders?status=${f}`} className={`rounded-full px-3 py-1 font-semibold capitalize ${f === filter ? "bg-ink text-white" : "bg-slate-200 text-slate-700"}`}>{f}</Link>

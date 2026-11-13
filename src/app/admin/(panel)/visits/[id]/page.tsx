@@ -8,16 +8,18 @@ import { requireAdmin } from "@/lib/auth";
 import { fmtAppointment, fmtDateTime, fmtDay, money, zoneDay, zoneTime } from "@/lib/format";
 import { appUrl } from "@/lib/stripe";
 import type { MeasureMeta } from "@/components/MeasureTool";
-import { addVisitNote, deleteVisitNote, saveMeasurements, updateVisit } from "../../../actions";
+import { addVisitNote, deleteVisit, deleteVisitNote, saveMeasurements, updateVisit } from "../../../actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function VisitDetail({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string }> }) {
+export default async function VisitDetail({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string }> }) {
   await requireAdmin();
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
   const [v] = await db().select().from(schema.visits).where(eq(schema.visits.id, id));
   if (!v) notFound();
+  const sp = await searchParams;
+  const error = sp.error;
   const [media, notes, quotes] = await Promise.all([
     db().select().from(schema.visitMedia).where(eq(schema.visitMedia.visitId, id)).orderBy(asc(schema.visitMedia.createdAt)),
     db().select().from(schema.visitNotes).where(eq(schema.visitNotes.visitId, id)).orderBy(asc(schema.visitNotes.createdAt)),
@@ -28,7 +30,7 @@ export default async function VisitDetail({ params, searchParams }: { params: Pr
       <Link href="/admin/visits" className="text-sm text-slate-500 hover:underline">← Virtual visits</Link>
       <h1 className="mt-2 text-2xl font-bold">{v.name} <Status value={v.status} /></h1>
       <p className="text-sm text-slate-500">{v.mode === "async" ? "Video review" : "Live call"} requested {fmtDateTime(v.createdAt)} · came from {v.source}</p>
-      <div className="mt-4"><Saved show={(await searchParams).saved === "1"} /></div>
+      <div className="mt-4"><Saved show={sp.saved === "1"} /></div>
       <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl bg-ink p-4 text-white">
         <div className="flex-1">
           <p className="font-display font-bold">Video call</p>
@@ -92,6 +94,15 @@ export default async function VisitDetail({ params, searchParams }: { params: Pr
           {quotes.map((q) => <li key={q.id} className="flex justify-between py-2"><Link className="underline" href={`/admin/quotes/${q.id}`}>{q.title}</Link><span>{money(q.totalCents)} <Status value={q.status} /></span></li>)}
         </ul>
       </div>
+
+      <form action={deleteVisit} className="card mt-6 border-red-200">
+        <input type="hidden" name="id" value={v.id} />
+        <h2 className="font-bold text-red-800">Delete this request</h2>
+        <p className="mt-1 text-sm text-slate-600">Removes the request with its photos, videos, snapshots, measurements and notes. Estimates created from it are kept.</p>
+        {error === "confirm" && <p role="alert" className="mt-2 text-sm font-semibold text-red-700">Tick the box to confirm.</p>}
+        <label className="mt-3 flex items-start gap-3 text-sm"><input type="checkbox" name="confirm" required /> <span>I understand this is permanent and can&apos;t be undone.</span></label>
+        <button className="btn btn-danger mt-3">Delete permanently</button>
+      </form>
     </>
   );
 }

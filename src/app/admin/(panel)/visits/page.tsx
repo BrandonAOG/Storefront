@@ -7,8 +7,9 @@ import { fmtDateTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-export default async function VisitsAdmin() {
+export default async function VisitsAdmin({ searchParams }: { searchParams: Promise<{ deleted?: string }> }) {
   await requireAdmin();
+  const deleted = (await searchParams).deleted === "1";
   const v = schema.visits;
   const rows = await db()
     .select({ v, files: sql<number>`(select count(*)::int from visit_media m where m.visit_id = ${v.id})`, quotes: sql<number>`(select count(*)::int from quotes q where q.visit_id = ${v.id})` })
@@ -18,6 +19,8 @@ export default async function VisitsAdmin() {
   return (
     <>
       <h1 className="text-2xl font-bold">Virtual visits</h1>
+      {deleted && <p role="status" className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">Request deleted.</p>}
+      <p className="mt-1 text-sm text-slate-500">Open a request to schedule it, start the call, or delete it.</p>
       <div className="card mt-4 overflow-x-auto p-0">
         <table className="table">
           <thead><tr><th>Requested</th><th>Customer</th><th>Topic</th><th>Type</th><th>Files</th><th>Estimates</th><th>Status</th></tr></thead>
