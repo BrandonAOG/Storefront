@@ -64,3 +64,38 @@ export function validQuad(pts: Pt[]): boolean {
   }
   return true;
 }
+
+/**
+ * Best-fit perspective transform through many point pairs (four or more).
+ * Using many points averages out small errors in each one, which keeps
+ * measurements steadier far away from the reference.
+ */
+export function fitHomography(src: Pt[], dst: Pt[]): number[] | null {
+  if (src.length < 4 || src.length !== dst.length) return null;
+  // Least squares on the same equations as above: (AᵀA) h = Aᵀb.
+  const N = Array.from({ length: 8 }, () => new Array<number>(9).fill(0));
+  const add = (row: number[], b: number) => {
+    for (let i = 0; i < 8; i++) {
+      for (let j = 0; j < 8; j++) N[i][j] += row[i] * row[j];
+      N[i][8] += row[i] * b;
+    }
+  };
+  for (let i = 0; i < src.length; i++) {
+    const { x, y } = src[i];
+    const { x: u, y: v } = dst[i];
+    add([x, y, 1, 0, 0, 0, -u * x, -u * y], u);
+    add([0, 0, 0, x, y, 1, -v * x, -v * y], v);
+  }
+  for (let col = 0; col < 8; col++) {
+    let pivot = col;
+    for (let r = col + 1; r < 8; r++) if (Math.abs(N[r][col]) > Math.abs(N[pivot][col])) pivot = r;
+    if (Math.abs(N[pivot][col]) < 1e-12) return null;
+    [N[col], N[pivot]] = [N[pivot], N[col]];
+    for (let r = 0; r < 8; r++) {
+      if (r === col) continue;
+      const f = N[r][col] / N[col][col];
+      for (let c = col; c < 9; c++) N[r][c] -= f * N[col][c];
+    }
+  }
+  return [...N.map((row, i) => row[8] / row[i]), 1];
+}

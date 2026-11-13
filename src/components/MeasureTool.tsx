@@ -14,8 +14,19 @@ type Mode = "rect" | "scale" | "measure";
 const dist = (l: Line) => Math.hypot(l.bx - l.ax, l.by - l.ay);
 const num = (v: string) => Number.parseFloat(v) || 0;
 
-/** 63 -> 5' 3" */
+const QUARTERS = ["", "¼", "½", "¾"];
+
+/** 63 -> 5' 3". Short lengths (under 3 ft) are shown to the nearest quarter inch: 8.5 -> 8½". */
 export function feetInches(inches: number): string {
+  if (inches < 36) {
+    const q = Math.round(inches * 4);
+    const whole = Math.floor(q / 4);
+    const frac = QUARTERS[q % 4];
+    const ft = Math.floor(whole / 12);
+    const rest = whole % 12;
+    const small = `${rest || !frac ? rest : ""}${frac}"`;
+    return ft > 0 ? `${ft}' ${small}` : small;
+  }
   const total = Math.round(inches);
   const ft = Math.floor(total / 12);
   const rest = total % 12;
@@ -69,6 +80,15 @@ export function MeasureTool({ mediaId, url, name, initial, save, presets = BUILT
   const [approx, setApprox] = useState(false);
   const hadReference = useRef(Boolean(initial?.rect || initial?.scale));
   const [busy, startTransition] = useTransition();
+  // Zooming in to place marks exactly. `view` is how far the enlarged picture is shifted inside its frame.
+  const [zoom, setZoom] = useState(1);
+  const [view, setView] = useState({ x: 0, y: 0 });
+  const [moving, setMoving] = useState(false);
+  const pan = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
+  const [dragEnd, setDragEnd] = useState<{ i: number; end: "a" | "b" } | null>(null);
+  // For touch screens, where there is no Shift key: the next drag moves a line end instead of drawing.
+  const [adjust, setAdjust] = useState(false);
+  const frame = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
   const img = useRef<HTMLImageElement>(null);
 
@@ -89,7 +109,9 @@ export function MeasureTool({ mediaId, url, name, initial, save, presets = BUILT
     setCheckBar("");
     setApprox(!found.full);
     setCorners(found.pts);
-    setRect({ pts: found.pts, widthIn: found.widthIn, heightIn: found.heightIn });
+    // If the page was printed smaller than full size, the tool has already worked that out from the paper's edges.
+    const k = found.printScale ?? 1;
+    setRect({ pts: found.pts, widthIn: found.widthIn * k, heightIn: found.heightIn * k });
     setScale(null);
     setMode("measure");
     setState("");
@@ -118,6 +140,16 @@ export function MeasureTool({ mediaId, url, name, initial, save, presets = BUILT
   }, [rect]);
   const perPixel = scale ? scale.inches / dist(scale) : 0;
   const calibrated = Boolean(H) || perPixel > 0;
+  /** A line that ends a long way from the reference rectangle is less reliable: small errors grow with distance. */
+  const farOff = (l: Line): boolean => {
+    if (!H || !rect) return false;
+    const c = { x: rect.widthIn / 2, y: rect.heightIn / 2 };
+    const reach = Math.max(...[{ x: l.ax, y: l.ay }, { x: l.bx, y: l.by }].map((p) => {
+      const q = project(H, p);
+      return Math.hypot(q.x - c.x, q.y - c.y);
+    }));
+    return reach > 5 * Math.max(rect.widthIn, rect.heightIn);
+  };
   const inchesOf = (l: Line): number => {
     if (H) {
       const a = project(H, { x: l.ax, y: l.ay });
@@ -127,8 +159,41 @@ export function MeasureTool({ mediaId, url, name, initial, save, presets = BUILT
     return dist(l) * perPixel;
   };
 
-  const stroke = Math.max(2, size.w / 320);
-  const font = Math.max(14, size.w / 42);
+  // Marks keep the same size on screen however far you zoom in, so they never cover what you're aiming at.
+  const stroke = Math.max(2, size.w / 320) / zoom;
+  const font = Math.max(14, size.w / 42) / zoom;
+
+  const clampView = (x: number, y: number, z: number) => {
+    const r = frame.current?.getBoundingClientRect();
+    if (!r) return { x: 0, y: 0 };
+    return { x: Math.min(0, Math.max(r.width * (1 - z), x)), y: Math.min(0, Math.max(r.height * (1 - z), y)) };
+  };
+  /** Zoom in or out, keeping the spot under (clientX, clientY) where it is. Without a spot, zooms on the middle. */
+  const zoomTo = (next: number, clientX?: number, clientY?: number) => {
+    const r = frame.current?.getBoundingClientRect();
+    if (!r) return;
+    const z = Math.min(10, Math.max(1, next));
+    const px = (clientX ?? r.left + r.width / 2) - r.left;
+    const py = (clientY ?? r.top + r.height / 2) - r.top;
+    setView((v) => clampView(px - ((px - v.x) / zoom) * z, py - ((py - v.y) / zoom) * z, z));
+    setZoom(z);
+    if (z === 1) setMoving(false);
+  };
+  // Mouse wheel over the picture zooms on the pointer. (Registered by hand so the page itself doesn't scroll.)
+  const wheelRef = useRef<(e: WheelEvent) => void>(() => {});
+  useEffect(() => {
+    wheelRef.current = (e: WheelEvent) => {
+      e.preventDefault();
+      zoomTo(zoom * (e.deltaY < 0 ? 1.25 : 0.8), e.clientX, e.clientY);
+    };
+  });
+  useEffect(() => {
+    const el = frame.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => wheelRef.current(e);
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
   const grab = stroke * 9; // how close a tap must be to pick up a corner
 
   const point = (e: React.PointerEvent): Pt => {
@@ -139,8 +204,35 @@ export function MeasureTool({ mediaId, url, name, initial, save, presets = BUILT
   const down = (e: React.PointerEvent) => {
     if (!size.w) return;
     (e.target as Element).setPointerCapture?.(e.pointerId);
+    // Move the enlarged picture around: the Move button, or the middle mouse button at any time.
+    if ((moving || e.button === 1) && zoom > 1) {
+      e.preventDefault();
+      pan.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+      return;
+    }
     const p = point(e);
     setState("");
+    if (mode === "measure" && (e.shiftKey || adjust) && lines.length) {
+      // Hold Shift (or turn on "Adjust a line") and press near a line end to pick it up and move it.
+      // Without Shift a press always starts a new line, so measurements can share a starting point.
+      let pick: { i: number; end: "a" | "b" } | null = null;
+      let nearest = size.w * 0.12;
+      lines.forEach((l, i) => {
+        for (const end of ["a", "b"] as const) {
+          const d = Math.hypot((end === "a" ? l.ax : l.bx) - p.x, (end === "a" ? l.ay : l.by) - p.y);
+          if (d < nearest) {
+            nearest = d;
+            pick = { i, end };
+          }
+        }
+      });
+      if (pick) {
+        const { i, end } = pick as { i: number; end: "a" | "b" };
+        setDragEnd({ i, end });
+        setLines(lines.map((l, j) => (j !== i ? l : end === "a" ? { ...l, ax: p.x, ay: p.y } : { ...l, bx: p.x, by: p.y })));
+      }
+      return;
+    }
     if (mode === "rect") {
       const near = corners.findIndex((c) => Math.hypot(c.x - p.x, c.y - p.y) < grab);
       if (near >= 0) setDragCorner(near);
@@ -155,7 +247,14 @@ export function MeasureTool({ mediaId, url, name, initial, save, presets = BUILT
   };
 
   const move = (e: React.PointerEvent) => {
+    if (pan.current) {
+      const from = pan.current;
+      return setView(clampView(from.vx + e.clientX - from.x, from.vy + e.clientY - from.y, zoom));
+    }
     const p = point(e);
+    if (dragEnd) {
+      return setLines(lines.map((l, i) => (i !== dragEnd.i ? l : dragEnd.end === "a" ? { ...l, ax: p.x, ay: p.y } : { ...l, bx: p.x, by: p.y })));
+    }
     if (dragCorner !== null) {
       const next = corners.map((c, i) => (i === dragCorner ? p : c));
       setCorners(next);
@@ -165,6 +264,8 @@ export function MeasureTool({ mediaId, url, name, initial, save, presets = BUILT
   };
 
   const up = () => {
+    pan.current = null;
+    setDragEnd(null);
     setDragCorner(null);
     if (!draft) return;
     if (dist(draft) > size.w * 0.015) {
@@ -309,7 +410,19 @@ export function MeasureTool({ mediaId, url, name, initial, save, presets = BUILT
 
   return (
     <div>
-      <div className="relative select-none overflow-hidden rounded-xl bg-slate-100">
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+        <div className="flex items-center gap-1 rounded-full border border-slate-300 bg-white p-1 font-bold">
+          <button type="button" className="h-9 w-9 rounded-full hover:bg-slate-100 disabled:opacity-40" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => zoomTo(zoom / 1.5)}>−</button>
+          <span className="min-w-12 text-center" aria-live="polite">{zoom.toFixed(zoom < 10 && zoom % 1 ? 1 : 0)}×</span>
+          <button type="button" className="h-9 w-9 rounded-full hover:bg-slate-100 disabled:opacity-40" aria-label="Zoom in" disabled={zoom >= 10} onClick={() => zoomTo(zoom * 1.5)}>+</button>
+        </div>
+        <button type="button" className={`btn ${moving ? "btn-dark" : "btn-ghost"}`} disabled={zoom <= 1} aria-pressed={moving} onClick={() => setMoving(!moving)}>Move picture</button>
+        <button type="button" className="btn btn-ghost" disabled={zoom <= 1} onClick={() => zoomTo(1)}>Whole picture</button>
+        <button type="button" className={`btn ${adjust ? "btn-dark" : "btn-ghost"}`} disabled={!lines.length} aria-pressed={adjust} onClick={() => setAdjust(!adjust)} title="Or hold Shift while you drag">Adjust a line</button>
+        <span className="basis-full text-xs text-slate-500">Scroll the mouse wheel over the picture to zoom in on a spot. Dropped a line end in the wrong place? Hold <kbd className="rounded border border-slate-300 bg-white px-1 font-sans">Shift</kbd> and drag near it to move it.</span>
+      </div>
+      <div ref={frame} className="relative select-none overflow-hidden rounded-xl bg-slate-100">
+        <div style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${zoom})`, transformOrigin: "0 0" }} className="relative">
         {/* eslint-disable-next-line @next/next/no-img-element -- stored photo shown at its own address */}
         <img ref={img} src={url} alt={name} draggable={false} className="block w-full" onLoad={(e) => setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} />
         {size.w > 0 && (
@@ -317,13 +430,13 @@ export function MeasureTool({ mediaId, url, name, initial, save, presets = BUILT
             ref={svg}
             viewBox={`0 0 ${size.w} ${size.h}`}
             preserveAspectRatio="none"
-            className="absolute inset-0 h-full w-full cursor-crosshair touch-none"
+            className={`absolute inset-0 h-full w-full touch-none ${moving && zoom > 1 ? "cursor-grab" : "cursor-crosshair"}`}
             role="img"
             aria-label="Draw on the photo to measure"
             onPointerDown={down}
             onPointerMove={move}
             onPointerUp={up}
-            onPointerCancel={() => { setDraft(null); setDragCorner(null); }}
+            onPointerCancel={() => { setDraft(null); setDragCorner(null); setDragEnd(null); pan.current = null; }}
           >
             {ordered.length > 1 && (
               <polygon points={ordered.map((p) => `${p.x},${p.y}`).join(" ")} fill={quadOk ? "rgba(56,189,248,0.12)" : "rgba(239,68,68,0.2)"} stroke={quadOk || ordered.length < 4 ? "#38bdf8" : "#ef4444"} strokeWidth={stroke * 0.45} strokeLinejoin="round" />
@@ -341,6 +454,7 @@ export function MeasureTool({ mediaId, url, name, initial, save, presets = BUILT
             {draft && drawn(draft, mode === "scale" ? "#38bdf8" : "#fed425", mode === "measure" && calibrated ? feetInches(inchesOf(draft)) : "", "draft")}
           </svg>
         )}
+        </div>
       </div>
 
       {sheet && rect && (
@@ -348,14 +462,23 @@ export function MeasureTool({ mediaId, url, name, initial, save, presets = BUILT
           <p className="font-semibold">
             {sheet.full ? `Measuring sheet ${sheet.n} (${sheet.name}) found. Reference set automatically.` : `Only one corner of measuring sheet ${sheet.n} is readable, so this reference is small and less accurate. Retake the snapshot with the whole sheet in view if you can.`}
           </p>
-          <p className="mt-1 text-slate-700">Just drag lines to measure. Accurate for the flat surface the sheet is taped to.</p>
+          <p className="mt-1 text-slate-700">Just drag lines to measure. Accurate for the flat surface the sheet is taped to. Anything that sticks out toward the camera reads larger than it is.</p>
+          {sheet.full && (
+            <p className="mt-1 text-slate-700">
+              {sheet.printScale === null
+                ? "Print size: couldn't check it from the paper's edges in this picture. Ask the customer what the 6-inch bar measures if precision matters."
+                : Math.abs(sheet.printScale - 1) < 0.012
+                  ? "Print size: checked against the paper's edges. Printed at full size."
+                  : `Print size: this page was printed at ${Math.round(sheet.printScale * 100)}%, not 100%. Measurements are corrected for that automatically.`}
+            </p>
+          )}
           <div className="mt-2 flex flex-wrap items-end gap-2">
             <label>
-              <span className="label">Customer&apos;s check bar measured (in)</span>
+              <span className="label">Override: customer&apos;s check bar measured (in)</span>
               <input className="input w-24" inputMode="decimal" placeholder={String(SHEET.checkIn)} value={checkBar} onChange={(e) => setCheckBar(e.target.value)} />
             </label>
             <button type="button" className="btn btn-ghost" disabled={!checkBar} onClick={applyCheckBar}>Adjust</button>
-            <span className="basis-full text-xs text-slate-600">Only needed if the bar printed on the sheet isn&apos;t {SHEET.checkIn} inches, which means their printer shrank the page.</span>
+            <span className="basis-full text-xs text-slate-600">Only needed if the automatic print-size check above couldn&apos;t run or looks wrong.</span>
           </div>
         </div>
       )}
@@ -427,7 +550,7 @@ export function MeasureTool({ mediaId, url, name, initial, save, presets = BUILT
 
       {calibrated && lines.length > 0 && (
         <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm">
-          {lines.map((l, i) => <li key={i}><strong>{feetInches(inchesOf(l))}</strong></li>)}
+          {lines.map((l, i) => <li key={i}><strong>{feetInches(inchesOf(l))}</strong>{farOff(l) && <span className="ml-2 text-xs font-semibold text-amber-700">far from the reference, less precise</span>}</li>)}
         </ol>
       )}
       {approx && calibrated && <p className="mt-2 text-xs font-semibold text-amber-700">Approximate: this reference is only roughly the stated size, so treat these numbers as a guide.</p>}
