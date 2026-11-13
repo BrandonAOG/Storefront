@@ -150,20 +150,63 @@ export function MeasureTool({ mediaId, url, name, initial, save }: { mediaId: st
   const quadOk = corners.length === 4 && validQuad(ordered);
   const needRectSize = mode === "rect" && corners.length === 4 && !rect;
 
+  /**
+   * A fine crosshair with an open centre, so the exact spot stays visible
+   * instead of sitting under a dot. Dark outline first, colour on top.
+   */
+  const cross = (x: number, y: number, color: string) => {
+    const gap = stroke * 0.9;
+    const arm = stroke * 4.5;
+    const arms = [
+      [x - arm, y, x - gap, y],
+      [x + gap, y, x + arm, y],
+      [x, y - arm, x, y - gap],
+      [x, y + gap, x, y + arm],
+    ];
+    return (
+      <>
+        {arms.map(([x1, y1, x2, y2], i) => <line key={`o${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#000" strokeWidth={stroke * 1.1} opacity={0.7} />)}
+        {arms.map(([x1, y1, x2, y2], i) => <line key={`c${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth={stroke * 0.45} />)}
+      </>
+    );
+  };
+
   const drawn = (l: Line, color: string, label: string, key: string) => {
     const mx = (l.ax + l.bx) / 2;
     const my = (l.ay + l.by) / 2;
-    const tw = label.length * font * 0.62 + font;
+    const small = font * 0.8;
+    const tw = label.length * small * 0.6 + small * 0.8;
+    // The label sits beside the line (on its upper side), never on top of what is being measured.
+    const len = Math.hypot(l.bx - l.ax, l.by - l.ay) || 1;
+    let nx = -(l.by - l.ay) / len;
+    let ny = (l.bx - l.ax) / len;
+    if (ny > 0 || (ny === 0 && nx > 0)) {
+      nx = -nx;
+      ny = -ny;
+    }
+    const off = stroke * 4 + small * 0.85 + (Math.abs(nx) * tw) / 2;
+    const lx = Math.min(size.w - tw / 2, Math.max(tw / 2, mx + nx * off));
+    const ly = Math.min(size.h - small, Math.max(small, my + ny * off));
     return (
       <g key={key}>
-        <line x1={l.ax} y1={l.ay} x2={l.bx} y2={l.by} stroke="#000" strokeWidth={stroke * 2.2} strokeLinecap="round" opacity={0.55} />
-        <line x1={l.ax} y1={l.ay} x2={l.bx} y2={l.by} stroke={color} strokeWidth={stroke} strokeLinecap="round" />
-        <circle cx={l.ax} cy={l.ay} r={stroke * 2} fill={color} stroke="#000" strokeWidth={stroke / 2} />
-        <circle cx={l.bx} cy={l.by} r={stroke * 2} fill={color} stroke="#000" strokeWidth={stroke / 2} />
+        <line x1={l.ax} y1={l.ay} x2={l.bx} y2={l.by} stroke="#000" strokeWidth={stroke * 1.1} opacity={0.6} />
+        <line x1={l.ax} y1={l.ay} x2={l.bx} y2={l.by} stroke={color} strokeWidth={stroke * 0.45} />
+        {/* End marks like a tape measure or a drawing dimension: a short bar square to the line, so the exact end stays visible. */}
+        {[[l.ax, l.ay], [l.bx, l.by]].map(([x, y], i) => {
+          const tick = stroke * 4;
+          const px = (-(l.by - l.ay) / len) * tick;
+          const py = ((l.bx - l.ax) / len) * tick;
+          return (
+            <g key={i}>
+              <line x1={x - px} y1={y - py} x2={x + px} y2={y + py} stroke="#000" strokeWidth={stroke * 1.1} opacity={0.6} />
+              <line x1={x - px} y1={y - py} x2={x + px} y2={y + py} stroke={color} strokeWidth={stroke * 0.45} />
+            </g>
+          );
+        })}
         {label && (
           <>
-            <rect x={mx - tw / 2} y={my - font * 0.8} width={tw} height={font * 1.5} rx={font * 0.3} fill="#000" opacity={0.8} />
-            <text x={mx} y={my + font * 0.3} textAnchor="middle" fontSize={font} fontWeight="700" fill={color} fontFamily="system-ui, sans-serif">{label}</text>
+            <rect x={lx - tw / 2} y={ly - small * 0.72} width={tw} height={small * 1.35} rx={small * 0.3} fill="#000" opacity={0.72} />
+            <text x={lx} y={ly + small * 0.3} textAnchor="middle" fontSize={small} fontWeight="700" fill={color} fontFamily="system-ui, sans-serif">{label}</text>
           </>
         )}
       </g>
@@ -206,12 +249,13 @@ export function MeasureTool({ mediaId, url, name, initial, save }: { mediaId: st
             onPointerCancel={() => { setDraft(null); setDragCorner(null); }}
           >
             {ordered.length > 1 && (
-              <polygon points={ordered.map((p) => `${p.x},${p.y}`).join(" ")} fill={quadOk ? "rgba(56,189,248,0.18)" : "rgba(239,68,68,0.2)"} stroke={quadOk || ordered.length < 4 ? "#38bdf8" : "#ef4444"} strokeWidth={stroke} strokeLinejoin="round" />
+              <polygon points={ordered.map((p) => `${p.x},${p.y}`).join(" ")} fill={quadOk ? "rgba(56,189,248,0.12)" : "rgba(239,68,68,0.2)"} stroke={quadOk || ordered.length < 4 ? "#38bdf8" : "#ef4444"} strokeWidth={stroke * 0.45} strokeLinejoin="round" />
             )}
             {ordered.map((p, i) => (
               <g key={`c${i}`}>
-                <circle cx={p.x} cy={p.y} r={stroke * 3.5} fill="#38bdf8" stroke="#000" strokeWidth={stroke / 2} />
-                <text x={p.x} y={p.y + font * 0.32} textAnchor="middle" fontSize={font * 0.85} fontWeight="700" fill="#000" fontFamily="system-ui, sans-serif">{i + 1}</text>
+                {cross(p.x, p.y, "#38bdf8")}
+                {/* The corner number sits beside the crosshair, not on it. */}
+                <text x={p.x + stroke * 3} y={p.y - stroke * 3} fontSize={font * 0.8} fontWeight="700" fill="#38bdf8" stroke="#000" strokeWidth={stroke * 0.5} paintOrder="stroke" fontFamily="system-ui, sans-serif">{i + 1}</text>
               </g>
             ))}
             {scale && drawn(scale, "#38bdf8", `${feetInches(scale.inches)} (reference)`, "scale")}
