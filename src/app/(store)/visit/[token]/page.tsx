@@ -34,7 +34,7 @@ export default async function VisitStatus({ params }: { params: Promise<{ token:
         {open && v.scheduledAt && (
           <p className="mt-4 rounded-xl bg-cream p-4 font-display font-bold">Your video call is {fmtAppointment(v.scheduledAt)} (Eastern time).</p>
         )}
-        {open && (list.needed.length + list.recommended.length > 0 || uploads) && (
+        {open && (
           <div className="mt-4 rounded-xl border border-slate-200 p-4 text-sm">
             <h2 className="font-display text-base font-bold">Before your call</h2>
             {list.needed.length > 0 && (
@@ -49,6 +49,11 @@ export default async function VisitStatus({ params }: { params: Promise<{ token:
                 <ul className="mt-1 list-disc space-y-1 pl-5 text-slate-700">{list.recommended.map((item) => <li key={item}>{item}</li>)}</ul>
               </>
             )}
+            <div className="mt-4 border-t border-slate-200 pt-4 first:mt-0 first:border-0 first:pt-0">
+              <p className="font-semibold">Have a printer? Print our measuring sheets.</p>
+              <p className="mt-1 text-slate-600">Three pages you tape up near your panel, your meter and the generator spot. They let us measure accurately from the video, which often saves a separate site visit.</p>
+              <a href="/measuring-sheets" target="_blank" rel="noopener noreferrer" className="btn btn-dark mt-3">Get the measuring sheets</a>
+            </div>
             {uploads && (
               <div className="mt-4 border-t border-slate-200 pt-4 first:mt-0 first:border-0 first:pt-0">
                 <p className="font-semibold">Have a property survey or site plan?</p>

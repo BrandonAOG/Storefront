@@ -5,6 +5,8 @@ import { db, schema } from "@/db";
 import { Saved, Select, Status } from "@/components/admin";
 import { VisitReview } from "@/components/VisitReview";
 import { requireAdmin } from "@/lib/auth";
+import { parseRefs } from "@/lib/refs";
+import { getSettings } from "@/lib/settings";
 import { fmtAppointment, fmtDateTime, fmtDay, money, zoneDay, zoneTime } from "@/lib/format";
 import { appUrl } from "@/lib/stripe";
 import type { MeasureMeta } from "@/components/MeasureTool";
@@ -78,6 +80,7 @@ export default async function VisitDetail({ params, searchParams }: { params: Pr
           visitId={v.id}
           media={media.map((m) => ({ id: m.id, url: m.url, name: m.name, contentType: m.contentType, kind: m.kind, meta: (m.meta as MeasureMeta | null) ?? null }))}
           saveMeasure={saveMeasurements}
+          presets={parseRefs((await getSettings()).refPresets)}
           notes={notes.map((n) => ({ id: n.id, mediaId: n.mediaId, atSeconds: n.atSeconds, body: n.body }))}
           addNote={addVisitNote}
           deleteNote={deleteVisitNote}

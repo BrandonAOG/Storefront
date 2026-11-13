@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { MediaActions } from "./MediaActions";
+import type { RefPreset } from "@/lib/refs";
 import { MeasureTool, type MeasureMeta } from "./MeasureTool";
 
 type Media = { id: string; url: string; name: string; contentType: string; kind: string; meta: MeasureMeta | null };
@@ -14,12 +15,13 @@ type Props = {
   addNote: (fd: FormData) => Promise<void>;
   deleteNote: (fd: FormData) => Promise<void>;
   saveMeasure: (id: string, meta: MeasureMeta) => Promise<{ ok: boolean }>;
+  presets?: RefPreset[];
 };
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 /** Watch the customer's files and pin notes to moments in a video. */
-export function VisitReview({ visitId, media, notes, addNote, deleteNote, saveMeasure }: Props) {
+export function VisitReview({ visitId, media, notes, addNote, deleteNote, saveMeasure, presets }: Props) {
   const [current, setCurrent] = useState(media[0]?.id ?? "");
   const [at, setAt] = useState<number | null>(null);
   const video = useRef<HTMLVideoElement>(null);
@@ -52,7 +54,7 @@ export function VisitReview({ visitId, media, notes, addNote, deleteNote, saveMe
             <span className="mt-2 block text-slate-600">{active.name}</span>
           </p>
         )}
-        {active && !isVideo && !isPdf && <MeasureTool key={active.id} mediaId={active.id} url={active.url} name={active.name} initial={active.meta} save={saveMeasure} />}
+        {active && !isVideo && !isPdf && <MeasureTool key={active.id} mediaId={active.id} url={active.url} name={active.name} initial={active.meta} save={saveMeasure} presets={presets} />}
         {active && (
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
             <span className="font-semibold">{active.name || "Unnamed"}</span>

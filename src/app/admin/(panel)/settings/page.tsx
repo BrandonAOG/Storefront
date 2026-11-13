@@ -56,6 +56,17 @@ export default async function SettingsAdmin({ searchParams }: { searchParams: Pr
           <textarea className="input" name="callRecommended" rows={7} maxLength={3000} defaultValue={s.callRecommended} />
           <span className="mt-1 block text-xs text-slate-500">Leave a box empty to hide that list.</span>
         </label>
+        <h2 className="mt-2 border-t border-slate-200 pt-4 font-bold sm:col-span-2">Measuring: known sizes</h2>
+        <p className="-mt-2 text-sm text-slate-600 sm:col-span-2">
+          One-click references in the measuring tool, used when the customer hasn&apos;t put up a <a className="underline" href="/measuring-sheets" target="_blank" rel="noopener noreferrer">measuring sheet</a>. One per line, sizes in inches.
+        </p>
+        <label className="sm:col-span-2">
+          <span className="label">Known sizes</span>
+          <textarea className="input font-mono text-sm" name="refPresets" rows={10} maxLength={4000} defaultValue={s.refPresets} spellCheck={false} />
+          <span className="mt-1 block text-xs text-slate-500">
+            Rectangle: <code>Name | width x height</code>. Single length: <code>Name | length</code>. Start a line with <code>~</code> if the size is only roughly right; measurements taken from it are then labelled approximate.
+          </span>
+        </label>
         <button className="btn btn-dark sm:col-span-2">Save settings</button>
       </form>
     </>

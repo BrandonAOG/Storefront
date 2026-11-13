@@ -75,6 +75,7 @@ export async function saveSettings(fd: FormData) {
       heroSubB: str(fd, "heroSubB", 300),
       callNeeded: str(fd, "callNeeded", 3000),
       callRecommended: str(fd, "callRecommended", 3000),
+      refPresets: str(fd, "refPresets", 4000),
     })
     .where(eq(schema.settings.id, 1));
   revalidatePath("/", "layout");

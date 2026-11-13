@@ -42,7 +42,9 @@ export const settings = pgTable("settings", {
   /** What customers should have ready for a video call. One item per line. Shown on their visit page and in call emails. */
   callNeeded: text("call_needed").notNull().default("A charged phone, or a charger nearby. Video uses more battery than normal.\nGood signal or Wi-Fi where your equipment is. Garages and the side of the house are often weak spots.\nA clear path to your electrical panel, your gas or propane meter, and where the generator would go. Unlock any gates."),
   /** Helpful but optional items. One per line. */
-  callRecommended: text("call_recommended").notNull().default("A tape measure.\nA sheet of printer paper and some tape. We'll ask you to tape it flat where we need to measure.\nYour property survey or site plan, if you have one. You can add a photo of it on your visit page before the call.\nA flashlight, if your electrical panel is in a dark spot.\nA second person to hold the phone, if that's easier.\nKnow whether you have natural gas or propane, and where the meter or tank is."),
+  callRecommended: text("call_recommended").notNull().default("A tape measure.\nOur 3 measuring sheets, printed and taped up (print them from your visit page). No printer? A plain sheet of printer paper and some tape works too.\nYour property survey or site plan, if you have one. You can add a photo of it on your visit page before the call.\nA flashlight, if your electrical panel is in a dark spot.\nA second person to hold the phone, if that's easier.\nKnow whether you have natural gas or propane, and where the meter or tank is."),
+  /** Known-size objects offered as one-click references when measuring. One per line; see lib/refs.ts for the format. */
+  refPresets: text("ref_presets").notNull().default("Letter paper | 8.5 x 11\nAOG measuring sheet, marker frame | 6.5 x 9\nOutlet or switch cover plate | 2.75 x 4.5\nCredit card | 3.37 x 2.125\nDollar bill | 6.14 x 2.61\nStandard brick face | 7.625 x 2.25\nConcrete block face | 15.625 x 7.625\nStandard door | 36 x 80\n~Electric meter cover, across | 6.375\n~Indoor panel cover, width | 14.5"),
 });
 
 export const customers = pgTable("customers", {

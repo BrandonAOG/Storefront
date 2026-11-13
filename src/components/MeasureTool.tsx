@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { findSheet, type FoundSheet } from "@/lib/findSheet";
 import { homography, orderCorners, project, validQuad, type Pt } from "@/lib/homography";
+import { DEFAULT_REFS, parseRefs, type RefPreset } from "@/lib/refs";
+import { SHEET } from "@/lib/sheets";
 
 type Line = { ax: number; ay: number; bx: number; by: number };
 type Rect = { pts: Pt[]; widthIn: number; heightIn: number };
@@ -19,11 +22,7 @@ export function feetInches(inches: number): string {
   return ft > 0 ? `${ft}' ${rest}"` : `${rest}"`;
 }
 
-const PRESETS: { label: string; w: number; h: number }[] = [
-  { label: "Letter paper, upright (8.5 × 11 in)", w: 8.5, h: 11 },
-  { label: "Letter paper, sideways (11 × 8.5 in)", w: 11, h: 8.5 },
-  { label: "Standard door (36 × 80 in)", w: 36, h: 80 },
-];
+const BUILT_IN = parseRefs(DEFAULT_REFS);
 
 /**
  * Measure things in a photo.
@@ -35,8 +34,21 @@ const PRESETS: { label: string; w: number; h: number }[] = [
  *
  * Quick: mark one line of known length. Only accurate for things at the same
  * distance and angle as that line.
+ *
+ * Automatic: if the customer taped up one of our printed measuring sheets, the
+ * tool finds it in the photo and sets the reference with no clicks.
  */
-export function MeasureTool({ mediaId, url, name, initial, save }: { mediaId: string; url: string; name: string; initial: MeasureMeta | null; save: (id: string, meta: MeasureMeta) => Promise<{ ok: boolean }> }) {
+type Props = {
+  mediaId: string;
+  url: string;
+  name: string;
+  initial: MeasureMeta | null;
+  save: (id: string, meta: MeasureMeta) => Promise<{ ok: boolean }>;
+  /** Known-size objects from Settings. Falls back to the built-in list. */
+  presets?: RefPreset[];
+};
+
+export function MeasureTool({ mediaId, url, name, initial, save, presets = BUILT_IN }: Props) {
   const [size, setSize] = useState({ w: initial?.w ?? 0, h: initial?.h ?? 0 });
   const [scale, setScale] = useState(initial?.scale ?? null);
   const [rect, setRect] = useState<Rect | null>(initial?.rect ?? null);
@@ -49,6 +61,13 @@ export function MeasureTool({ mediaId, url, name, initial, save }: { mediaId: st
   const [pendingScale, setPendingScale] = useState<Line | null>(null);
   const [dims, setDims] = useState({ wf: "", wi: "", hf: "", hi: "", lf: "", li: "" });
   const [state, setState] = useState<"" | "saved" | "failed">("");
+  // Automatic reference from a printed measuring sheet.
+  const [sheet, setSheet] = useState<FoundSheet | null>(null);
+  const [looking, setLooking] = useState<"" | "looking" | "none">("");
+  const [checkBar, setCheckBar] = useState("");
+  // The current reference came from a roughly-sized object, so results are approximate.
+  const [approx, setApprox] = useState(false);
+  const hadReference = useRef(Boolean(initial?.rect || initial?.scale));
   const [busy, startTransition] = useTransition();
   const svg = useRef<SVGSVGElement>(null);
   const img = useRef<HTMLImageElement>(null);
@@ -59,6 +78,38 @@ export function MeasureTool({ mediaId, url, name, initial, save }: { mediaId: st
     const el = img.current;
     if (el?.complete && el.naturalWidth > 0) setSize({ w: el.naturalWidth, h: el.naturalHeight });
   }, [url]);
+
+  /** Look for a printed measuring sheet in the photo and, if found, use it as the reference. */
+  const lookForSheet = async (replace: boolean) => {
+    setLooking("looking");
+    const found = await findSheet(url).catch(() => null);
+    if (!found) return setLooking(replace ? "none" : "");
+    setLooking("");
+    setSheet(found);
+    setCheckBar("");
+    setApprox(!found.full);
+    setCorners(found.pts);
+    setRect({ pts: found.pts, widthIn: found.widthIn, heightIn: found.heightIn });
+    setScale(null);
+    setMode("measure");
+    setState("");
+  };
+  // A photo with no reference yet: look for a sheet straight away, no clicks needed.
+  useEffect(() => {
+    if (hadReference.current) return;
+    hadReference.current = true;
+    const t = setTimeout(() => void lookForSheet(false), 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per photo
+  }, [url]);
+
+  /** The customer's check bar didn't measure 6 inches: the page was printed smaller or larger, so scale the reference to match. */
+  const applyCheckBar = () => {
+    const measured = num(checkBar);
+    if (!sheet || !rect || measured < SHEET.checkIn * 0.7 || measured > SHEET.checkIn * 1.3) return;
+    const k = measured / SHEET.checkIn;
+    setRect({ ...rect, widthIn: sheet.widthIn * k, heightIn: sheet.heightIn * k });
+  };
 
   // The active way of turning photo pixels into inches.
   const H = useMemo(() => {
@@ -128,20 +179,46 @@ export function MeasureTool({ mediaId, url, name, initial, save }: { mediaId: st
     const widthIn = num(dims.wf) * 12 + num(dims.wi);
     const heightIn = num(dims.hf) * 12 + num(dims.hi);
     if (corners.length !== 4 || widthIn <= 0 || heightIn <= 0) return;
+    setApprox(false);
     const pts = orderCorners(corners);
     if (!validQuad(pts)) return;
     setCorners(pts);
     setRect({ pts, widthIn, heightIn });
     setScale(null);
+    setSheet(null);
+    setMode("measure");
+  };
+
+  /** One click: use a known-size object for the rectangle just marked. Works out which way round it is from its shape in the photo. */
+  const applyPreset = (p: RefPreset) => {
+    if (corners.length !== 4 || p.h === null) return;
+    const pts = orderCorners(corners);
+    if (!validQuad(pts)) return;
+    const across = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) + Math.hypot(pts[2].x - pts[3].x, pts[2].y - pts[3].y);
+    const down = Math.hypot(pts[3].x - pts[0].x, pts[3].y - pts[0].y) + Math.hypot(pts[2].x - pts[1].x, pts[2].y - pts[1].y);
+    const wide = across >= down;
+    const [long, short] = p.w >= p.h ? [p.w, p.h] : [p.h, p.w];
+    setCorners(pts);
+    setRect({ pts, widthIn: wide ? long : short, heightIn: wide ? short : long });
+    setScale(null);
+    setSheet(null);
+    setApprox(p.approx);
     setMode("measure");
   };
 
   const confirmScale = () => {
     const total = num(dims.lf) * 12 + num(dims.li);
     if (!pendingScale || total <= 0) return;
-    setScale({ ...pendingScale, inches: total });
+    setLength(total, false);
+  };
+
+  const setLength = (inches: number, rough: boolean) => {
+    if (!pendingScale) return;
+    setScale({ ...pendingScale, inches });
     setRect(null);
     setCorners([]);
+    setSheet(null);
+    setApprox(rough);
     setPendingScale(null);
     setMode("measure");
   };
@@ -220,7 +297,7 @@ export function MeasureTool({ mediaId, url, name, initial, save }: { mediaId: st
   const help =
     mode === "rect"
       ? corners.length < 4
-        ? `Tap the four corners of a flat rectangle whose size you know, such as a sheet of paper on the wall, a door or the panel cover. ${corners.length} of 4 placed.`
+        ? `Tap the four corners of a flat rectangle whose size you know, such as a sheet of paper on the wall, an outlet cover or a door. ${corners.length} of 4 placed.`
         : rect
           ? "Drag any corner to fine-tune it, or switch to Measure."
           : ""
@@ -266,18 +343,39 @@ export function MeasureTool({ mediaId, url, name, initial, save }: { mediaId: st
         )}
       </div>
 
+      {sheet && rect && (
+        <div className="mt-3 rounded-lg border border-green-300 bg-green-50 p-3 text-sm" role="status">
+          <p className="font-semibold">
+            {sheet.full ? `Measuring sheet ${sheet.n} (${sheet.name}) found. Reference set automatically.` : `Only one corner of measuring sheet ${sheet.n} is readable, so this reference is small and less accurate. Retake the snapshot with the whole sheet in view if you can.`}
+          </p>
+          <p className="mt-1 text-slate-700">Just drag lines to measure. Accurate for the flat surface the sheet is taped to.</p>
+          <div className="mt-2 flex flex-wrap items-end gap-2">
+            <label>
+              <span className="label">Customer&apos;s check bar measured (in)</span>
+              <input className="input w-24" inputMode="decimal" placeholder={String(SHEET.checkIn)} value={checkBar} onChange={(e) => setCheckBar(e.target.value)} />
+            </label>
+            <button type="button" className="btn btn-ghost" disabled={!checkBar} onClick={applyCheckBar}>Adjust</button>
+            <span className="basis-full text-xs text-slate-600">Only needed if the bar printed on the sheet isn&apos;t {SHEET.checkIn} inches, which means their printer shrank the page.</span>
+          </div>
+        </div>
+      )}
+      {looking === "none" && !sheet && <p className="mt-3 rounded-lg border border-slate-300 bg-slate-50 p-3 text-sm" role="status">No measuring sheet found in this picture. Mark a known object by hand with Rectangle reference.</p>}
+
       {needRectSize && (
         <div className="mt-3 rounded-lg border border-sky-300 bg-sky-50 p-3 text-sm">
           {quadOk ? (
             <>
-              <p className="font-semibold">What size is the rectangle you marked?</p>
-              <p className="text-slate-600">Width is the edge from corner 1 to corner 2. Height is the edge from corner 1 to corner 4.</p>
+              <p className="font-semibold">What did you mark? Pick it, or type its size.</p>
+              <p className="text-slate-600">Picking a known object sets the size in one click, whichever way round it is.</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {PRESETS.map((p) => (
-                  <button key={p.label} type="button" className="rounded-full border border-sky-400 bg-white px-3 py-1.5 text-xs font-semibold" onClick={() => setDims({ ...dims, wf: "", wi: String(p.w), hf: "", hi: String(p.h) })}>{p.label}</button>
+                {presets.filter((p) => p.h !== null).map((p) => (
+                  <button key={p.label} type="button" className="rounded-full border border-sky-400 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-sky-100" onClick={() => applyPreset(p)}>
+                    {p.label} <span className="font-normal text-slate-500">{p.approx ? "about " : ""}{p.w} × {p.h} in</span>
+                  </button>
                 ))}
               </div>
-              <div className="mt-3 flex flex-wrap items-end gap-2">
+              <p className="mt-3 text-xs text-slate-600">Or type it. Width is the edge from corner 1 to corner 2; height is from corner 1 to corner 4.</p>
+              <div className="mt-1 flex flex-wrap items-end gap-2">
                 {field("wf", "Width ft")}{field("wi", "Width in")}{field("hf", "Height ft")}{field("hi", "Height in")}
                 <button type="button" className="btn btn-dark" onClick={confirmRect}>Use this rectangle</button>
               </div>
@@ -292,6 +390,15 @@ export function MeasureTool({ mediaId, url, name, initial, save }: { mediaId: st
       {pendingScale && (
         <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-sky-300 bg-sky-50 p-3 text-sm">
           <p className="w-full font-semibold">How long is the thing you just marked?</p>
+          <div className="flex w-full flex-wrap gap-2">
+            {presets.map((p) =>
+              (p.h === null ? [{ label: p.label, len: p.w }] : [{ label: `${p.label}, long side`, len: Math.max(p.w, p.h) }, { label: `${p.label}, short side`, len: Math.min(p.w, p.h) }]).map((o) => (
+                <button key={o.label} type="button" className="rounded-full border border-sky-400 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-sky-100" onClick={() => setLength(o.len, p.approx)}>
+                  {o.label} <span className="font-normal text-slate-500">{p.approx ? "about " : ""}{o.len} in</span>
+                </button>
+              )),
+            )}
+          </div>
           {field("lf", "Feet")}{field("li", "Inches")}
           <button type="button" className="btn btn-dark" onClick={confirmScale}>Set length</button>
           <button type="button" className="btn btn-ghost" onClick={() => setPendingScale(null)}>Cancel</button>
@@ -301,11 +408,12 @@ export function MeasureTool({ mediaId, url, name, initial, save }: { mediaId: st
       {help && !needRectSize && !pendingScale && <p className="mt-3 text-sm text-slate-600">{help}</p>}
 
       <div className="mt-3 flex flex-wrap gap-2">
+        <button type="button" className="btn btn-ghost" disabled={looking === "looking" || !size.w} onClick={() => void lookForSheet(true)}>{looking === "looking" ? "Looking…" : "Find measuring sheet"}</button>
         <button type="button" className={`btn ${mode === "rect" ? "btn-dark" : "btn-ghost"}`} onClick={() => setMode("rect")}>Rectangle reference</button>
         <button type="button" className={`btn ${mode === "scale" ? "btn-dark" : "btn-ghost"}`} onClick={() => setMode("scale")}>Line reference</button>
         <button type="button" className={`btn ${mode === "measure" ? "btn-dark" : "btn-ghost"}`} disabled={!calibrated} onClick={() => setMode("measure")}>Measure</button>
         <button type="button" className="btn btn-ghost" disabled={!lines.length} onClick={() => { setLines(lines.slice(0, -1)); setState(""); }}>Undo</button>
-        <button type="button" className="btn btn-ghost" disabled={!lines.length && !calibrated && !corners.length} onClick={() => { setLines([]); setScale(null); setRect(null); setCorners([]); setMode("rect"); setState(""); }}>Clear all</button>
+        <button type="button" className="btn btn-ghost" disabled={!lines.length && !calibrated && !corners.length} onClick={() => { setLines([]); setScale(null); setRect(null); setCorners([]); setSheet(null); setApprox(false); setLooking(""); setMode("rect"); setState(""); }}>Clear all</button>
         <button
           type="button"
           className="btn btn-primary"
@@ -322,6 +430,7 @@ export function MeasureTool({ mediaId, url, name, initial, save }: { mediaId: st
           {lines.map((l, i) => <li key={i}><strong>{feetInches(inchesOf(l))}</strong></li>)}
         </ol>
       )}
+      {approx && calibrated && <p className="mt-2 text-xs font-semibold text-amber-700">Approximate: this reference is only roughly the stated size, so treat these numbers as a guide.</p>}
       <p className="mt-2 text-xs text-slate-500">
         {H
           ? "Angle-corrected using your rectangle. Accurate only for points on that same flat surface (the same wall, or the same slab), not for depth. Confirm on site before ordering or pouring a pad."

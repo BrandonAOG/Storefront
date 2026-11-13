@@ -8,7 +8,7 @@
  */
 export const SETTINGS = {
   businessName: "Always On Generators",
-  phone: "239-323-2963",
+  phone: "239-839-3553",
   email: "office.aog@gmail.com",
   heroHeadline: "Whole-home standby generators, installed and serviced by your local Southwest Florida team.",
   heroSub: "Book generator service online any time, or request a free estimate for a new installation.",

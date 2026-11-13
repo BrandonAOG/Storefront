@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
+import type { RefPreset } from "@/lib/refs";
 import { MeasureTool, type MeasureMeta } from "../MeasureTool";
 import { MediaActions } from "../MediaActions";
 import { MicMeter } from "./MicMeter";
@@ -21,6 +22,7 @@ type Props = {
   addNote: (visitId: string, body: string) => Promise<Note[]>;
   saveMeasure: (id: string, meta: MeasureMeta) => Promise<{ ok: boolean }>;
   listShots: (visitId: string) => Promise<Shot[]>;
+  presets?: RefPreset[];
 };
 
 const clock = (s: number) => `${String(Math.floor(s / 3600)).padStart(2, "0")}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
@@ -77,7 +79,7 @@ function TimedPointer({ pointer, video, fit }: { pointer: { x: number; y: number
 }
 
 /** Your side of a virtual visit: the customer's camera, their details, snapshots and notes. */
-export function RepRoom({ visit, iceServers, shots: initialShots, notes: initialNotes, customerLink, addNote, saveMeasure, listShots }: Props) {
+export function RepRoom({ visit, iceServers, shots: initialShots, notes: initialNotes, customerLink, addNote, saveMeasure, listShots, presets }: Props) {
   // Each open call-room screen has its own id, so two teammates on the same call don't fight over it.
   const [clientId] = useState(() => crypto.randomUUID());
   const signalUrl = `/admin/call/${visit.id}/signal`;
@@ -431,6 +433,7 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
               url={open.url}
               name={open.name}
               initial={open.meta}
+              presets={presets}
               save={async (id, meta) => {
                 const res = await saveMeasure(id, meta);
                 if (res.ok) setShots((all) => all.map((s) => (s.id === id ? { ...s, meta } : s)));
