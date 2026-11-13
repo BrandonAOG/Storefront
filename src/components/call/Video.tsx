@@ -27,6 +27,20 @@ export const Video = forwardRef<HTMLVideoElement, VideoProps>(function Video({ s
     const v = el.current as (HTMLVideoElement & { setSinkId?: (id: string) => Promise<void> }) | null;
     if (sinkId && v?.setSinkId) void v.setSinkId(sinkId).catch(() => {});
   }, [sinkId]);
+  // Phones sometimes pause a live picture when the layout changes or the page
+  // returns from the background. A live stream should always be playing.
+  const resume = () => {
+    const v = el.current;
+    if (v && v.srcObject && (v.srcObject as MediaStream).active && v.paused) void v.play().catch(() => {});
+  };
+  useEffect(() => {
+    document.addEventListener("visibilitychange", resume);
+    const t = setInterval(resume, 2000);
+    return () => {
+      document.removeEventListener("visibilitychange", resume);
+      clearInterval(t);
+    };
+  }, []);
   // Reports whether real frames are on screen (the picture has a size).
   const report = () => onPicture?.(Boolean(el.current && el.current.videoWidth > 0));
   return (
@@ -39,6 +53,7 @@ export const Video = forwardRef<HTMLVideoElement, VideoProps>(function Video({ s
       onLoadedMetadata={report}
       onResize={report}
       onPlaying={report}
+      onPause={resume}
       onEmptied={() => onPicture?.(false)}
       className={`${className} ${mirror ? "-scale-x-100" : ""}`}
     />

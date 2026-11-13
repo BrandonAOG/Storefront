@@ -194,6 +194,23 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
             </div>
           ) : (
             <>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold">
+                <div className="flex items-center gap-1 rounded-full bg-white/10 p-1">
+                  <button type="button" className="rounded-full px-3 py-1.5 hover:bg-white/15" onClick={() => setFill(!fill)} title="Fit shows the whole picture; Fill uses the full width and trims the edges">{fill ? "Fit" : "Fill"}</button>
+                  <button type="button" className="rounded-full px-3 py-1.5 hover:bg-white/15 disabled:opacity-40" aria-label="Enlarge less" disabled={zoom <= 1} onClick={() => setZoom(Math.max(1, zoom - 0.5))}>−</button>
+                  <span className="grid min-w-9 place-items-center" aria-live="polite" title="Enlarges the picture on your screen. It doesn't add detail.">{zoom}×</span>
+                  <button type="button" className="rounded-full px-3 py-1.5 hover:bg-white/15 disabled:opacity-40" aria-label="Enlarge more" disabled={zoom >= 4} onClick={() => setZoom(Math.min(4, zoom + 0.5))}>+</button>
+                </div>
+                {call.remoteZoom && (
+                  <label className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5">
+                    <span>Customer&apos;s camera zoom</span>
+                    <input type="range" aria-label="Customer's camera zoom" min={call.remoteZoom.min} max={call.remoteZoom.max} step={call.remoteZoom.step} value={call.remoteZoom.value} onChange={(e) => call.zoomRemote(Number(e.target.value))} className="w-32 accent-[#fed425]" />
+                    <span className="min-w-8 text-right">{call.remoteZoom.value.toFixed(1)}×</span>
+                  </label>
+                )}
+                <button type="button" className="rounded-full bg-white/10 px-3 py-1.5 hover:bg-white/20 disabled:opacity-40" disabled={call.status === "waiting"} onClick={call.reconnect} title="Use this if the picture freezes or goes missing. The call carries on.">Reconnect picture</button>
+                <span role="status" className="ml-auto font-normal text-slate-300">{call.error || flash || (connected && !call.remoteZoom ? "For fine print, have them move closer and press Snapshot." : "")}</span>
+              </div>
               <div ref={stage} className="relative flex-1 overflow-hidden" onClick={pointAt}>
                 <Video
                   ref={remoteVideo}
@@ -207,38 +224,9 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
                 {!hasPicture && <p className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-slate-400">{connected ? "Waiting for the customer's camera picture…" : statusText[call.status]}</p>}
               </div>
 
-              {hasPicture && (
-                <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2 text-xs font-bold">
-                  <div className="flex gap-1 rounded-full bg-black/70 p-1">
-                    <button type="button" className="rounded-full px-3 py-1.5 hover:bg-white/15" onClick={() => setFill(!fill)} title="Fit shows the whole picture; Fill uses the full width and trims the edges">{fill ? "Fit" : "Fill"}</button>
-                    <button type="button" className="rounded-full px-3 py-1.5 hover:bg-white/15 disabled:opacity-40" aria-label="Enlarge less" disabled={zoom <= 1} onClick={() => setZoom(Math.max(1, zoom - 0.5))}>−</button>
-                    <span className="grid min-w-9 place-items-center" aria-live="polite" title="Enlarges the picture on your screen. It doesn't add detail.">{zoom}×</span>
-                    <button type="button" className="rounded-full px-3 py-1.5 hover:bg-white/15 disabled:opacity-40" aria-label="Enlarge more" disabled={zoom >= 4} onClick={() => setZoom(Math.min(4, zoom + 0.5))}>+</button>
-                  </div>
-                  {call.remoteZoom ? (
-                    <label className="flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5">
-                      <span>Customer&apos;s camera zoom</span>
-                      <input type="range" aria-label="Customer's camera zoom" min={call.remoteZoom.min} max={call.remoteZoom.max} step={call.remoteZoom.step} value={call.remoteZoom.value} onChange={(e) => call.zoomRemote(Number(e.target.value))} className="w-32 accent-[#fed425]" />
-                      <span className="min-w-8 text-right">{call.remoteZoom.value.toFixed(1)}×</span>
-                    </label>
-                  ) : (
-                    connected && <p className="max-w-64 rounded-xl bg-black/70 px-3 py-1.5 text-right font-normal text-slate-300">For fine print, ask the customer to move closer, then press Snapshot. Snapshots are sharper than the live picture.</p>
-                  )}
-                </div>
+              {connected && call.remotePaused && hasPicture && (
+                <p className="pointer-events-none absolute inset-x-0 bottom-3 z-10 mx-auto w-fit max-w-[90%] rounded-full bg-black/80 px-4 py-1.5 text-center text-sm">The customer&apos;s camera is paused. Ask them to come back to this page on their phone.</p>
               )}
-
-              {call.sharing ? (
-                <p className="absolute bottom-24 left-3 rounded-lg bg-brand px-3 py-2 text-xs font-bold text-black">You are showing your screen to the customer.</p>
-              ) : call.hasCamera ? (
-                <div className="absolute bottom-24 left-3 h-24 w-36 overflow-hidden rounded-lg border border-white/30 bg-slate-900">
-                  <Video stream={call.local} muted mirror className="h-full w-full object-cover" />
-                </div>
-              ) : (
-                <p className="absolute bottom-24 left-3 max-w-56 rounded-lg bg-black/70 px-3 py-2 text-xs text-slate-200">
-                  {call.hasMic ? "No camera on this computer. The customer can hear you but not see you." : "No camera or microphone on this computer. You can see and hear the customer, but they can't hear you."}
-                </p>
-              )}
-              {(flash || call.error) && <p role="status" className="absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/80 px-4 py-1.5 text-sm">{call.error || flash}</p>}
 
               <div className="flex flex-wrap items-center justify-center gap-3 border-t border-white/10 bg-slate-950 p-3">
                 <CallButton onClick={call.toggleMute} icon={call.muted || !call.hasMic ? "micOff" : "mic"} label={call.muted ? "Unmute microphone" : "Mute microphone"} active={call.muted} disabled={!call.hasMic} />
@@ -256,6 +244,20 @@ export function RepRoom({ visit, iceServers, shots: initialShots, notes: initial
         </div>
 
         <aside className="border-t border-white/10 bg-slate-900 lg:border-t-0 lg:border-l">
+          {live && (
+            <div className="border-b border-white/10 px-4 py-3 text-xs">
+              {call.sharing ? (
+                <p className="rounded-lg bg-brand px-3 py-2 font-bold text-black">You are showing your screen to the customer.</p>
+              ) : call.hasCamera ? (
+                <div className="flex items-center gap-3">
+                  <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-white/30 bg-slate-950"><Video stream={call.local} muted mirror className="h-full w-full object-cover" /></div>
+                  <p className="text-slate-300">{call.cameraOff ? "Your camera is off." : "This is what the customer sees of you."}</p>
+                </div>
+              ) : (
+                <p className="text-slate-300">{call.hasMic ? "No camera on this computer. The customer can hear you but not see you." : "No camera or microphone on this computer. You can see and hear the customer, but they can't hear you."}</p>
+              )}
+            </div>
+          )}
           <Section title="Customer details" open>
             <p><a className="underline" href={`tel:${visit.phone.replace(/[^\d+]/g, "")}`}>{visit.phone}</a><br /><span className="break-all">{visit.email}</span></p>
             {visit.address && <p className="mt-2">{visit.address} {visit.zip}</p>}

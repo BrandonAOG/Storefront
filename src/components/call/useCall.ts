@@ -36,6 +36,8 @@ export type CallState = {
   cameraProblem: "" | "missing" | "busy";
   /** Rep: this computer's screen is being shown to the customer. Customer: the rep is showing their screen. */
   sharing: boolean;
+  /** The other side's camera has stopped sending frames (their phone paused it or they switched apps). */
+  remotePaused: boolean;
   /** Customer: the rep is currently sending a picture (camera or screen), not just sound. */
   repVideo: boolean;
   /** Devices to choose from, and which are in use. */
@@ -61,7 +63,7 @@ export type CallState = {
 
 const initial = (role: Role): CallState => ({
   status: "idle", error: "", local: null, remote: null, muted: false, cameraOff: false, facing: role === "customer" ? "environment" : "user",
-  hasCamera: false, hasMic: false, cameraProblem: "", sharing: false, repVideo: false, mics: [], cameras: [], speakers: [], micId: "", cameraId: "", speakerId: "",
+  hasCamera: false, hasMic: false, cameraProblem: "", sharing: false, remotePaused: false, repVideo: false, mics: [], cameras: [], speakers: [], micId: "", cameraId: "", speakerId: "",
   pointer: null, locationAsked: false, location: null, remoteZoom: null, snapAsked: 0, torch: "unsupported",
 });
 
@@ -120,7 +122,11 @@ class CallEngine {
     }
     const num = (v: unknown) => typeof v === "number" && Number.isFinite(v);
     if (m.t === "point" && num(m.x) && num(m.y)) this.set({ pointer: { x: Math.min(1, Math.max(0, m.x)), y: Math.min(1, Math.max(0, m.y)), at: Date.now() } });
-    else if (m.t === "share" && this.opts.role === "customer") this.set({ sharing: Boolean(m.on) });
+    else if (m.t === "share" && this.opts.role === "customer") {
+      this.set({ sharing: Boolean(m.on) });
+      // Some phones pause their own camera while another picture takes over the screen. Make sure it is running again.
+      if (!m.on) void this.ensureCamera();
+    }
     else if (m.t === "video" && this.opts.role === "customer") this.set({ repVideo: Boolean(m.on) });
     else if (m.t === "locate" && this.opts.role === "customer") this.set({ locationAsked: true });
     else if (m.t === "caps" && this.opts.role === "rep") {
@@ -150,6 +156,27 @@ class CallEngine {
       if (this.opts.role === "rep") this.tellVideo();
       else this.tellCaps();
     };
+  }
+
+  /** Restart this device's camera if the phone stopped it, and keep sending it. */
+  private async ensureCamera() {
+    const track = this.stream?.getVideoTracks()[0];
+    if (!this.alive || !this.state.hasCamera || this.state.cameraOff) return;
+    if (track && track.readyState === "live") return;
+    try {
+      const fresh = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: this.state.facing }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+      await this.swapTrack("video", fresh.getVideoTracks()[0], true);
+      this.watchCamera();
+      void this.preferSharpness();
+    } catch {
+      /* camera still unavailable: the customer can leave and rejoin */
+    }
+  }
+
+  /** If the phone ends the camera on its own (another app took it), bring it back. */
+  private watchCamera() {
+    const track = this.stream?.getVideoTracks()[0];
+    if (track) track.onended = () => void this.ensureCamera();
   }
 
   /** Customer: tell the rep what this phone's camera can do (real zoom range, if any). */
@@ -198,7 +225,7 @@ class CallEngine {
     this.pc = null;
     this.dc = null;
     this.pendingIce = [];
-    this.set({ remote: null, pointer: null, remoteZoom: null });
+    this.set({ remote: null, pointer: null, remoteZoom: null, remotePaused: false });
   }
 
   /** The outgoing sender for sound or picture, whether or not it has a track yet. */
@@ -231,8 +258,17 @@ class CallEngine {
     };
     // Sound and picture arrive as separate tracks. Build a fresh stream from
     // everything received so far, so the screen updates as each one arrives.
-    p.ontrack = () => {
-      if (this.pc === p) this.set({ remote: new MediaStream(p.getReceivers().map((r) => r.track).filter((t) => t.readyState === "live")) });
+    p.ontrack = (e) => {
+      if (this.pc !== p) return;
+      this.set({ remote: new MediaStream(p.getReceivers().map((r) => r.track).filter((t) => t.readyState === "live")) });
+      if (e.track.kind === "video") {
+        // A phone pauses its camera when the browser is put in the background or another app takes over.
+        const report = () => {
+          if (this.pc === p) this.set({ remotePaused: e.track.muted });
+        };
+        e.track.onmute = report;
+        e.track.onunmute = report;
+      }
     };
     p.onconnectionstatechange = () => {
       if (this.pc !== p) return;
@@ -357,7 +393,10 @@ class CallEngine {
       const caps = (cam?.getCapabilities?.() ?? {}) as { torch?: boolean };
       this.set({ local: this.stream, hasCamera: Boolean(cam), hasMic: this.stream.getAudioTracks().length > 0, cameraOff: !cam, torch: caps.torch ? "off" : "unsupported" });
       void this.refreshDevices();
+      if (this.opts.role === "customer") this.watchCamera();
       navigator.mediaDevices.addEventListener?.("devicechange", this.refreshDevices);
+      // Coming back to the page after switching apps: restart the camera if the phone stopped it.
+      document.addEventListener("visibilitychange", this.onVisible);
       const init = await fetch(`${this.opts.signalUrl}?init=1`).then((r) => (r.ok ? r.json() : Promise.reject(new Error("signal"))));
       this.cursor = init.cursor;
       this.alive = true;
@@ -380,6 +419,15 @@ class CallEngine {
     }
   };
 
+  private onVisible = () => {
+    if (document.visibilityState === "visible" && this.opts.role === "customer") void this.ensureCamera();
+  };
+
+  /** Rep: drop the connection and set it up again. Fixes a frozen or missing picture without ending the call. */
+  reconnect = () => {
+    if (this.alive && this.opts.role === "rep") void this.offer();
+  };
+
   hangUp = () => {
     if (!this.alive) return;
     this.alive = false;
@@ -390,6 +438,7 @@ class CallEngine {
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
     navigator.mediaDevices.removeEventListener?.("devicechange", this.refreshDevices);
+    document.removeEventListener("visibilitychange", this.onVisible);
     this.set({ status: "ended", local: null, sharing: false, locationAsked: false });
   };
 
@@ -430,6 +479,7 @@ class CallEngine {
       await this.swapTrack("video", track, true);
       const caps = (track.getCapabilities?.() ?? {}) as { torch?: boolean };
       this.set({ facing: next, cameraOff: false, hasCamera: true, torch: caps.torch ? "off" : "unsupported" });
+      this.watchCamera();
       void this.preferSharpness();
       this.tellCaps();
     } catch {
@@ -573,6 +623,6 @@ export function useCall(opts: Options) {
     ...state,
     start: engine.start, hangUp: engine.hangUp, toggleMute: engine.toggleMute, toggleCamera: engine.toggleCamera, flipCamera: engine.flipCamera,
     pickMic: engine.pickMic, pickCamera: engine.pickCamera, pickSpeaker: engine.pickSpeaker, startShare: engine.startShare, stopShare: engine.stopShare,
-    point: engine.point, zoomRemote: engine.zoomRemote, requestPhoto: engine.requestPhoto, photoDone: engine.photoDone, requestLocation: engine.requestLocation, answerLocation: engine.answerLocation, toggleTorch: engine.toggleTorch,
+    reconnect: engine.reconnect, point: engine.point, zoomRemote: engine.zoomRemote, requestPhoto: engine.requestPhoto, photoDone: engine.photoDone, requestLocation: engine.requestLocation, answerLocation: engine.answerLocation, toggleTorch: engine.toggleTorch,
   };
 }

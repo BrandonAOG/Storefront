@@ -29,6 +29,8 @@ export function CustomerRoom({ token, business, firstName, iceServers }: { token
   const [upright, setUpright] = useState(false);
   const [hintClosed, setHintClosed] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [tileLeft, setTileLeft] = useState(false);
+  const [pointing, setPointing] = useState(false);
   const [locError, setLocError] = useState("");
 
   // When the specialist presses Snapshot, send a still straight from this phone's
@@ -60,6 +62,18 @@ export function CustomerRoom({ token, business, firstName, iceServers }: { token
       cancelled = true;
     };
   }, [snapAsked, photoDone, token]);
+
+  // While the specialist is pointing at something, their own small picture fades so it can't hide the spot.
+  const pointerAt = call.pointer?.at;
+  useEffect(() => {
+    if (!pointerAt) return;
+    const on = setTimeout(() => setPointing(true), 0);
+    const off = setTimeout(() => setPointing(false), 5000);
+    return () => {
+      clearTimeout(on);
+      clearTimeout(off);
+    };
+  }, [pointerAt]);
 
   /** Only runs when the customer taps Share. Their phone then asks them again before giving the location. */
   const shareLocation = () => {
@@ -102,13 +116,14 @@ export function CustomerRoom({ token, business, firstName, iceServers }: { token
   // While the specialist shows their screen, it takes the main view and the customer's camera shrinks to the corner.
   const repShown = call.repVideo && repPicture; // the specialist is sending a picture and frames have arrived
   const showingScreen = call.sharing && repShown;
-  const tile = "absolute top-14 right-3 z-10 h-36 w-24 overflow-hidden rounded-xl border border-white/30 bg-slate-900 shadow-lg sm:h-48 sm:w-36";
+  // The small picture: compact, smaller still when the phone is sideways, and it can be tapped to the other side.
+  const tile = `absolute top-12 z-20 h-28 w-20 overflow-hidden rounded-xl border border-white/30 bg-slate-900 shadow-lg transition-opacity sm:h-40 sm:w-28 landscape:top-2 landscape:h-16 landscape:w-24 ${tileLeft ? "left-3" : "right-3"}`;
   const main = "absolute inset-0 h-full w-full";
 
   return (
     <div className="relative h-dvh overflow-hidden bg-black text-white">
       {/* Their own camera: what the specialist sees. */}
-      <div className={showingScreen ? tile : main}>
+      <div className={showingScreen ? tile : main} onClick={showingScreen ? () => setTileLeft(!tileLeft) : undefined}>
         <Video ref={ownVideo} stream={call.local} muted mirror={call.facing === "user"} className="h-full w-full object-cover" onPicture={() => setUpright(Boolean(ownVideo.current && ownVideo.current.videoHeight > ownVideo.current.videoWidth))} />
         {!showingScreen && call.pointer && <TimedPointer key={call.pointer.at} pointer={call.pointer} video={ownVideo} />}
       </div>
@@ -122,14 +137,24 @@ export function CustomerRoom({ token, business, firstName, iceServers }: { token
         </p>
       )}
 
-      {/* The specialist: small in the corner, or full screen while they share their screen. */}
-      <div className={showingScreen ? main : tile}>
-        <Video stream={call.remote} onPicture={setRepPicture} className={`h-full w-full ${showingScreen ? "object-contain" : "object-cover"} ${repShown ? "" : "opacity-0"}`} />
-        {!repShown && <p className="absolute inset-0 grid place-items-center px-1 text-center text-xs text-slate-400">{call.status === "connected" ? `${business} (voice only)` : "Specialist joining…"}</p>}
+      {/* The specialist. Full screen while they share their screen; a small tappable picture when they are on camera;
+          and no box at all when they are voice-only, so nothing covers the customer's view. */}
+      <div
+        className={showingScreen ? main : repShown ? `${tile} ${pointing ? "pointer-events-none opacity-0" : ""}` : "pointer-events-none absolute h-px w-px overflow-hidden opacity-0"}
+        onClick={!showingScreen && repShown ? () => setTileLeft(!tileLeft) : undefined}
+        title={!showingScreen && repShown ? "Tap to move" : undefined}
+      >
+        <Video stream={call.remote} onPicture={setRepPicture} className={`h-full w-full ${showingScreen ? "object-contain" : "object-cover"}`} />
       </div>
 
-      <p role="status" className="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 to-transparent px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-6 text-center text-sm font-semibold">
-        {showingScreen ? `${business} is showing you their screen` : call.status === "connected" ? `Connected with ${business}` : call.status === "waiting" ? `We've let ${business} know you're here. Please stay on this page.` : statusText[call.status]}
+      <p role="status" className="pointer-events-none absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 to-transparent px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-6 text-center text-sm font-semibold landscape:pb-3 landscape:text-xs">
+        {showingScreen
+          ? `${business} is showing you their screen`
+          : call.status === "connected"
+            ? `Connected with ${business}${repShown ? "" : " (voice only)"}`
+            : call.status === "waiting"
+              ? `We've let ${business} know you're here. Please stay on this page.`
+              : statusText[call.status]}
       </p>
 
       {call.status === "connected" && upright && !hintClosed && !showingScreen && call.hasCamera && (
@@ -152,7 +177,8 @@ export function CustomerRoom({ token, business, firstName, iceServers }: { token
         </div>
       )}
 
-      <div className="absolute inset-x-0 bottom-0 z-10 flex flex-wrap justify-center gap-3 bg-gradient-to-t from-black/80 to-transparent px-4 pt-10 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      {/* Controls: along the bottom when upright; smaller when the phone is sideways so they cover less of the picture. */}
+      <div className="absolute inset-x-0 bottom-0 z-10 flex flex-wrap justify-center gap-3 bg-gradient-to-t from-black/80 to-transparent px-4 pt-10 pb-[max(1rem,env(safe-area-inset-bottom))] landscape:gap-2 landscape:from-black/50 landscape:pt-3 landscape:pb-[max(0.4rem,env(safe-area-inset-bottom))] landscape:[&_button]:h-11 landscape:[&_button]:min-w-11 landscape:[&_span]:hidden">
         <CallButton onClick={call.toggleMute} icon={call.muted ? "micOff" : "mic"} text={call.muted ? "Unmute" : "Mute"} label={call.muted ? "Unmute microphone" : "Mute microphone"} active={call.muted} />
         <CallButton onClick={() => void call.flipCamera()} icon="flip" text="Flip" label="Switch between front and back camera" disabled={!call.hasCamera} />
         {call.torch !== "unsupported" && <CallButton onClick={() => void call.toggleTorch()} icon="light" text="Light" label={call.torch === "on" ? "Turn flashlight off" : "Turn flashlight on"} active={call.torch === "on"} />}
